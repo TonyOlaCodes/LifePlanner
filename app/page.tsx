@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { db, getTodayString, getStreakForHabit } from "@/lib/db";
+import { db, getTodayString, getStreakForHabit, type Task } from "@/lib/db";
 import { getDailyQuote, CATEGORY_CONFIG, vibrate, formatDate } from "@/lib/utils";
 import ProgressRing from "@/components/ui/ProgressRing";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -71,7 +71,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function toggleTask(task: typeof todayTasks[0]) {
+  async function toggleTask(task: Task) {
     vibrate(40);
     if (!task.completed && task.recurrence && task.recurrence !== "none" && task.dueDate) {
       let nextDate = new Date(task.dueDate);

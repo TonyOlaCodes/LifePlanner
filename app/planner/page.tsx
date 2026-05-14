@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { db, getTodayString } from "@/lib/db";
+import { db, getTodayString, type Task } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { Plus, CheckCircle2, Circle, Trash2, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
@@ -81,7 +81,7 @@ export default function PlannerPage() {
     setAddOpen(false);
   }
 
-  async function toggleTask(task: typeof tasks[0]) {
+  async function toggleTask(task: Task) {
     vibrate(40);
     if (!task.completed && task.recurrence && task.recurrence !== "none" && task.dueDate) {
       // It's being checked, and it's recurring. Spawn the next one.
