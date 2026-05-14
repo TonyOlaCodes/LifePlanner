@@ -41,12 +41,18 @@ export default function SettingsPage() {
   const [focusDaily, setFocusDaily] = useState("60");
   const [focusWeekly, setFocusWeekly] = useState("360");
   const [focusMonthly, setFocusMonthly] = useState("1400");
+  const [focusShowDaily, setFocusShowDaily] = useState(true);
+  const [focusShowWeekly, setFocusShowWeekly] = useState(true);
+  const [focusShowMonthly, setFocusShowMonthly] = useState(true);
 
   useEffect(() => {
     if (!settings) return;
     setFocusDaily(String(settings.focusGoalDailyMinutes ?? 60));
     setFocusWeekly(String(settings.focusGoalWeeklyMinutes ?? 360));
     setFocusMonthly(String(settings.focusGoalMonthlyMinutes ?? 1400));
+    setFocusShowDaily(settings.focusShowDailyBar !== false);
+    setFocusShowWeekly(settings.focusShowWeeklyBar !== false);
+    setFocusShowMonthly(settings.focusShowMonthlyBar !== false);
   }, [settings]);
 
   if (!settings) return <div style={{ padding:40, textAlign:"center", color:"var(--text-secondary)" }}>Loading…</div>;
@@ -64,16 +70,16 @@ export default function SettingsPage() {
     if (hasLock) {
       const curOk = await verifyJournalPassword(journalCurrent, s.journalPassword);
       if (!curOk) {
-        setJournalNote({ type: "err", text: "Current password is wrong." });
+        setJournalNote({ type: "err", text: "Current phrase is wrong." });
         vibrate([40, 40, 40]);
         return;
       }
       if (!journalNew.trim()) {
-        setJournalNote({ type: "err", text: "Enter a new password to change it, or use “Forgot password” to remove the lock." });
+        setJournalNote({ type: "err", text: "Enter a new phrase to change it, or use “Locked out?” to remove the lock." });
         return;
       }
       if (journalNew !== journalConfirm) {
-        setJournalNote({ type: "err", text: "New passwords do not match." });
+        setJournalNote({ type: "err", text: "New phrases do not match." });
         return;
       }
       if (journalNew.length < 4) {
@@ -90,11 +96,11 @@ export default function SettingsPage() {
       return;
     }
     if (!journalNew.trim()) {
-      setJournalNote({ type: "err", text: "Choose a password." });
+      setJournalNote({ type: "err", text: "Choose a phrase." });
       return;
     }
     if (journalNew !== journalConfirm) {
-      setJournalNote({ type: "err", text: "Passwords do not match." });
+      setJournalNote({ type: "err", text: "Phrases do not match." });
       return;
     }
     if (journalNew.length < 4) {
@@ -105,7 +111,7 @@ export default function SettingsPage() {
     await db.settings.update(1, { journalPassword: hashed });
     setJournalNew("");
     setJournalConfirm("");
-    setJournalNote({ type: "ok", text: "Journal lock created (stored hashed on this device only)." });
+    setJournalNote({ type: "ok", text: "Journal lock created (stored on this device only)." });
     vibrate(40);
   }
 
@@ -153,6 +159,9 @@ export default function SettingsPage() {
       focusGoalDailyMinutes: d,
       focusGoalWeeklyMinutes: w,
       focusGoalMonthlyMinutes: m,
+      focusShowDailyBar: focusShowDaily,
+      focusShowWeeklyBar: focusShowWeekly,
+      focusShowMonthlyBar: focusShowMonthly,
     });
     setJournalNote({ type: "ok", text: "Focus goals saved." });
     setTimeout(() => setJournalNote(null), 2500);
@@ -263,25 +272,34 @@ export default function SettingsPage() {
 
       {/* Focus goals */}
       <Section title="Focus goals" icon={<Target size={15} />}>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
-          Targets for deep work on the Focus tab (minutes). Weekly and monthly caps should usually be larger than daily × 7 or × 30.
+        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10, lineHeight: 1.45 }}>
+          Minute targets for Focus. Check which bars show on that tab.
         </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Daily goal (minutes)</label>
-            <input type="number" min={1} className="lock-input" value={focusDaily} onChange={(e) => setFocusDaily(e.target.value)} />
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "10px 16px", marginBottom: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={focusShowDaily} onChange={(e) => setFocusShowDaily(e.target.checked)} style={{ width: 14, height: 14, accentColor: "var(--accent)" }} />
+              Day
+            </label>
+            <input type="number" min={1} className="lock-input" value={focusDaily} onChange={(e) => setFocusDaily(e.target.value)} style={{ width: 80, padding: "8px 8px", fontSize: 13 }} />
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Weekly goal (minutes)</label>
-            <input type="number" min={1} className="lock-input" value={focusWeekly} onChange={(e) => setFocusWeekly(e.target.value)} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={focusShowWeekly} onChange={(e) => setFocusShowWeekly(e.target.checked)} style={{ width: 14, height: 14, accentColor: "var(--accent)" }} />
+              Week
+            </label>
+            <input type="number" min={1} className="lock-input" value={focusWeekly} onChange={(e) => setFocusWeekly(e.target.value)} style={{ width: 80, padding: "8px 8px", fontSize: 13 }} />
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Monthly goal (minutes)</label>
-            <input type="number" min={1} className="lock-input" value={focusMonthly} onChange={(e) => setFocusMonthly(e.target.value)} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={focusShowMonthly} onChange={(e) => setFocusShowMonthly(e.target.checked)} style={{ width: 14, height: 14, accentColor: "var(--accent)" }} />
+              Month
+            </label>
+            <input type="number" min={1} className="lock-input" value={focusMonthly} onChange={(e) => setFocusMonthly(e.target.value)} style={{ width: 80, padding: "8px 8px", fontSize: 13 }} />
           </div>
           <button type="button" className="tap-scale" onClick={() => void saveFocusGoals()}
-            style={{ width: "100%", padding: 14, borderRadius: 14, background: "var(--accent)", border: "none", color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-            Save focus goals
+            style={{ padding: "10px 16px", borderRadius: 12, background: "var(--accent)", border: "none", color: "#000", fontWeight: 700, fontSize: 13, cursor: "pointer", marginLeft: "auto" }}>
+            Save
           </button>
         </div>
       </Section>
@@ -289,22 +307,22 @@ export default function SettingsPage() {
       {/* Security — journal lock */}
       <Section title="Security" icon={<Lock size={15}/>}>
         <p style={{ fontSize:13, color:"var(--text-secondary)", lineHeight:1.5, margin:"0 0 14px" }}>
-          The journal password is hashed on this device. To change it, you must enter the current one. If you forgot it, you can only remove the lock by deleting all journal entries (cannot be undone).
+          Journal lock is stored only on this device. To change it, enter what you use now. If you are locked out, use the recovery flow below (it deletes journal entries).
         </p>
         {settings.journalPassword ? (
           <>
-            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Current password</label>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Current phrase</label>
             <input type="password" className="lock-input" value={journalCurrent} onChange={(e) => setJournalCurrent(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
-            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>New password</label>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>New phrase</label>
             <input type="password" className="lock-input" value={journalNew} onChange={(e) => setJournalNew(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
-            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm new password</label>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm new phrase</label>
             <input type="password" className="lock-input" value={journalConfirm} onChange={(e) => setJournalConfirm(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
           </>
         ) : (
           <>
-            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Create password</label>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Create phrase</label>
             <input type="password" className="lock-input" value={journalNew} onChange={(e) => setJournalNew(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
-            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm password</label>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm phrase</label>
             <input type="password" className="lock-input" value={journalConfirm} onChange={(e) => setJournalConfirm(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
           </>
         )}
@@ -315,7 +333,7 @@ export default function SettingsPage() {
         {settings.journalPassword && (
           <button type="button" className="tap-scale" onClick={() => { setForgotJournalPhrase(""); setForgotJournalOpen(true); }}
             style={{ width:"100%", padding:12, borderRadius:12, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            Forgot password?
+            Locked out?
           </button>
         )}
         {journalNote && (

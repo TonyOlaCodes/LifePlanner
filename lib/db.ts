@@ -141,6 +141,10 @@ export interface AppSettings {
   focusGoalDailyMinutes?: number;
   focusGoalWeeklyMinutes?: number;
   focusGoalMonthlyMinutes?: number;
+  /** When false, that progress bar is hidden on Focus (defaults true if unset). */
+  focusShowDailyBar?: boolean;
+  focusShowWeeklyBar?: boolean;
+  focusShowMonthlyBar?: boolean;
   /** Which quick-log tiles appear on Home (subset of sleep | workout | weight | calories) */
   quickLogKeys?: ("sleep" | "workout" | "weight" | "calories")[];
   /** True after first-install starter pack was applied or skipped */
@@ -218,6 +222,9 @@ export async function initializeSettings(): Promise<AppSettings> {
     focusGoalDailyMinutes: 60,
     focusGoalWeeklyMinutes: 360,
     focusGoalMonthlyMinutes: 1400,
+    focusShowDailyBar: true,
+    focusShowWeeklyBar: true,
+    focusShowMonthlyBar: true,
     quickLogKeys: ["sleep", "workout", "weight", "calories"],
     bootstrapPackApplied: false,
     accountStartDate: today,

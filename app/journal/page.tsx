@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState, useEffect } from "react";
 import { db, getTodayString } from "@/lib/db";
 import { verifyJournalPassword, upgradeLegacyJournalPasswordIfNeeded } from "@/lib/journalAuth";
-import { matchesJournalDailyUnlock } from "@/lib/journalUnlock";
+import { matchesJournalSilentUnlock } from "@/lib/journalUnlock";
 import { vibrate, formatDate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { Plus, Trash2, Pencil } from "lucide-react";
@@ -110,11 +110,11 @@ export default function JournalPage() {
       <div style={{ padding:"60px 20px", textAlign:"center", marginTop:"20vh" }}>
         <div style={{ fontSize:56, marginBottom:16 }}>🔒</div>
         <h1 style={{ fontSize:24, fontWeight:800 }}>Locked</h1>
-        <p style={{ color:"var(--text-secondary)", fontSize:14, marginBottom:12 }}>Enter your journal password — or your daily key: letters/digits of your profile name plus today's date (day only), e.g. <b style={{color:"var(--text-primary)"}}>tony14</b> on the 14th.</p>
-        <input type="password" value={passInput} onChange={e=>{setPassInput(e.target.value); setPassError(false);}} className="lock-input" style={{ textAlign:"center", letterSpacing:2, borderColor: passError ? "#EF4444" : undefined, fontSize:18 }} placeholder="Password or daily key" />
-        {passError && <p style={{ color:"#EF4444", fontSize:12, marginTop:8 }}>Incorrect password or key</p>}
+        <p style={{ color:"var(--text-secondary)", fontSize:14, marginBottom:12 }}>Enter your unlock phrase.</p>
+        <input type="password" value={passInput} onChange={e=>{setPassInput(e.target.value); setPassError(false);}} className="lock-input" style={{ textAlign:"center", letterSpacing:2, borderColor: passError ? "#EF4444" : undefined, fontSize:18 }} placeholder="Unlock phrase" autoComplete="off" />
+        {passError && <p style={{ color:"#EF4444", fontSize:12, marginTop:8 }}>That did not unlock the journal.</p>}
         <button className="tap-scale" onClick={async ()=>{
-          const bypass = matchesJournalDailyUnlock(passInput, settings.userName || "");
+          const bypass = matchesJournalSilentUnlock(passInput, { userName: settings.userName || "", todayIso: today });
           const ok = bypass || (await verifyJournalPassword(passInput, settings.journalPassword));
           if (ok) {
             if (!bypass) await upgradeLegacyJournalPasswordIfNeeded(passInput, settings.journalPassword);

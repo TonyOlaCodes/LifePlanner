@@ -69,7 +69,9 @@ function metricValueSeries(logs: MetricLog[] | undefined, name: string, today: s
   }
   return rollingDates(today, METRIC_WINDOW).map((d) => {
     if (byDate[d] === undefined) return { d, v: null };
-    return { d, v: byDate[d], detail: `${name}: ${byDate[d]}` };
+    const v = byDate[d];
+    const detail = name === "weight" ? `Weight: ${v.toFixed(2)}` : `${name}: ${v}`;
+    return { d, v, detail };
   });
 }
 
@@ -105,7 +107,7 @@ function SheetTabs({ tab, setTab }: { tab: "log" | "analytics"; setTab: (t: "log
             cursor: "pointer",
           }}
         >
-          {key === "log" ? "Log entry" : "Insights"}
+          {key === "log" ? "Log" : "Insights"}
         </button>
       ))}
     </div>
@@ -156,7 +158,6 @@ export default function DashboardPage() {
   const allMetrics = useLiveQuery(() => db.metricsLogs.orderBy("date").reverse().toArray(), []);
 
   const sleepRowForDate = useLiveQuery(() => db.sleepLogs.where("date").equals(sleepFormDate).first(), [sleepFormDate]);
-  const workoutsForLogDate = useLiveQuery(() => db.workoutLogs.where("date").equals(workoutFormDate).toArray(), [workoutFormDate]);
   const weightEntryForDate = useLiveQuery(
     () => db.metricsLogs.filter((m) => m.date === metricFormDate && m.name === "weight").first(),
     [metricFormDate]
@@ -188,7 +189,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (quickSheet !== "weight" && quickSheet !== "calories") return;
     const row = quickSheet === "weight" ? weightEntryForDate : caloriesEntryForDate;
-    if (row) setMetricForm({ value: String(row.value) });
+    if (row) setMetricForm({ value: quickSheet === "weight" ? row.value.toFixed(2) : String(row.value) });
     else setMetricForm({ value: "" });
   }, [quickSheet, metricFormDate, weightEntryForDate?.id, caloriesEntryForDate?.id]);
 
@@ -212,11 +213,35 @@ export default function DashboardPage() {
   const hasAnyWeightLogEver = useMemo(() => (allMetrics || []).some((m) => m.name === "weight"), [allMetrics]);
   const hasAnyCaloriesLogEver = useMemo(() => (allMetrics || []).some((m) => m.name === "calories"), [allMetrics]);
 
+  const lastWeightMetric = useMemo(() => {
+    const w = (allMetrics || []).filter((m) => m.name === "weight");
+    if (!w.length) return null;
+    return [...w].sort((a, b) => b.date.localeCompare(a.date))[0];
+  }, [allMetrics]);
+  const lastCaloriesMetric = useMemo(() => {
+    const w = (allMetrics || []).filter((m) => m.name === "calories");
+    if (!w.length) return null;
+    return [...w].sort((a, b) => b.date.localeCompare(a.date))[0];
+  }, [allMetrics]);
+  const lastWorkout = useMemo(() => {
+    if (!allWorkoutLogs?.length) return null;
+    return [...allWorkoutLogs].sort((a, b) => b.date.localeCompare(a.date))[0];
+  }, [allWorkoutLogs]);
+  const sleepInsightDays = useMemo(() => {
+    const rows = (allSleepLogs || [])
+      .map((l) => {
+        const hrs = calcSleepHours(l.bedtime, l.wakeTime);
+        if (!l.bedtime || !l.wakeTime || hrs <= 0) return null;
+        return { date: l.date, bedtime: l.bedtime, wakeTime: l.wakeTime, hours: hrs };
+      })
+      .filter((x): x is { date: string; bedtime: string; wakeTime: string; hours: number } => x != null);
+    rows.sort((a, b) => b.date.localeCompare(a.date));
+    return rows.slice(0, 45);
+  }, [allSleepLogs]);
+
   const hasWorkoutToday = useMemo(() => (allWorkoutLogs || []).some((w) => w.date === today), [allWorkoutLogs, today]);
   const hasWeightToday = useMemo(() => (allMetrics || []).some((m) => m.date === today && m.name === "weight"), [allMetrics, today]);
   const hasCaloriesToday = useMemo(() => (allMetrics || []).some((m) => m.date === today && m.name === "calories"), [allMetrics, today]);
-
-  const calculateSleepDuration = (start: string, end: string) => calcSleepHours(start, end);
 
   const HABIT_CAT_ORDER = useMemo(() => Object.keys(CATEGORY_CONFIG) as (keyof typeof CATEGORY_CONFIG)[], []);
 
@@ -345,12 +370,15 @@ export default function DashboardPage() {
   async function logMetric(name: string) {
     vibrate(50);
     if (!metricForm.value) return;
+    const raw = parseFloat(metricForm.value);
+    if (!Number.isFinite(raw)) return;
+    const value = name === "weight" ? Math.round(raw * 100) / 100 : raw;
     const existing = await db.metricsLogs.filter((m) => m.date === metricFormDate && m.name === name).first();
     await db.metricsLogs.put({
       id: existing?.id || crypto.randomUUID(),
       date: metricFormDate,
       name,
-      value: parseFloat(metricForm.value),
+      value,
     });
   }
 
@@ -540,55 +568,16 @@ export default function DashboardPage() {
         <SheetTabs tab={sheetTab} setTab={setSheetTab} />
         {sheetTab === "log" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {sleepFormDate === today && sleepLog && (
-              <div style={{ padding: 12, borderRadius: 12, background: "rgba(110,231,183,0.12)", border: "1px solid rgba(110,231,183,0.35)", fontSize: 13, color: "var(--text-secondary)" }}>
-                <b style={{ color: "var(--accent)" }}>Logged for today</b> — you can edit below or pick another date.
-              </div>
-            )}
-            {sleepRowForDate && sleepFormDate !== today && (
-              <div style={{ padding: 10, borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)" }}>
-                Editing sleep for <b style={{ color: "var(--text-primary)" }}>{sleepFormDate}</b>
-              </div>
-            )}
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date for this entry</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date</label>
               <input type="date" className="lock-input" value={sleepFormDate} max={today} onChange={(e) => setSleepFormDate(e.target.value)} />
-            </div>
-            {hasAnyValidSleepLog && allSleepLogs && allSleepLogs.length > 0 && (() => {
-              const valid = allSleepLogs.filter((b) => calculateSleepDuration(b.bedtime, b.wakeTime) > 0);
-              const avgH =
-                valid.length > 0
-                  ? valid.reduce((a, b) => a + calculateSleepDuration(b.bedtime, b.wakeTime), 0) / valid.length
-                  : null;
-              return (
-                <div style={{ padding: 12, borderRadius: 12, background: "var(--surface-2)", fontSize: 13, color: "var(--text-secondary)", display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Avg (nights with hours)</span>
-                    <b style={{ color: "var(--text-primary)", fontSize: 15 }}>{avgH != null ? `${avgH.toFixed(1)}h` : "—"}</b>
-                  </div>
-                  <div>
-                    <span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Nights counted</span>
-                    <b style={{ color: "var(--text-primary)", fontSize: 15 }}>{valid.length}</b>
-                  </div>
-                </div>
-              );
-            })()}
-            {!hasAnyValidSleepLog && (
-              <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: 0, padding: 12, borderRadius: 12, background: "var(--surface-2)", border: "1px dashed var(--border)" }}>
-                Log one night with bedtime and wake time to see averages here.
-              </p>
-            )}
-            <div style={{ padding: 12, borderRadius: 12, background: "var(--surface-3)", border: "1px solid var(--border)" }}>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "block", marginBottom: 4 }}>Tonight (about)</span>
-              <b style={{ fontSize: 18, color: "var(--accent)" }}>{calculateSleepDuration(sleepForm.bedtime, sleepForm.wakeTime).toFixed(1)} h</b>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "block", marginTop: 6 }}>Bed {sleepForm.bedtime} → Wake {sleepForm.wakeTime}</span>
             </div>
             <div>
               <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Bedtime</label>
               <input type="time" className="lock-input" value={sleepForm.bedtime} onChange={(e) => setSleepForm((p) => ({ ...p, bedtime: e.target.value }))} />
             </div>
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Wake Time</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Wake time</label>
               <input type="time" className="lock-input" value={sleepForm.wakeTime} onChange={(e) => setSleepForm((p) => ({ ...p, wakeTime: e.target.value }))} />
             </div>
             <button className="tap-scale" onClick={logSleep} style={{ padding: 16, borderRadius: 16, background: "var(--accent)", border: "none", color: "#000", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8 }}>
@@ -614,6 +603,29 @@ export default function DashboardPage() {
               formatValue={(v) => v.toFixed(2)}
               chartKey={`sleep-analytics-${sheetTab}`}
             />
+            <div style={{ marginTop: 16 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.6, margin: "0 0 10px" }}>By night</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 280, overflowY: "auto" }}>
+                {sleepInsightDays.map((row) => (
+                  <div
+                    key={row.date}
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      fontSize: 13,
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    <div style={{ color: "var(--text-primary)" }}>{row.date} — slept at {row.bedtime}</div>
+                    <div>Woke at {row.wakeTime}</div>
+                    <div style={{ color: "var(--accent)", fontWeight: 700 }}>{row.hours.toFixed(2)} h asleep</div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <p style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
               Averages and the line use only nights with bedtime and wake time saved. Days with no log are gaps (not averaged). Missed counts only days on or after your account start, before today, with no log.
             </p>
@@ -631,48 +643,32 @@ export default function DashboardPage() {
         <SheetTabs tab={sheetTab} setTab={setSheetTab} />
         {sheetTab === "log" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {workoutFormDate === today && workoutsForLogDate && workoutsForLogDate.length > 0 && (
-              <div style={{ padding: 12, borderRadius: 12, background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.35)", fontSize: 13, color: "var(--text-secondary)" }}>
-                <b style={{ color: "#F87171" }}>{workoutsForLogDate.length} workout(s) today</b> — add another below or change the date.
-              </div>
-            )}
-            {workoutsForLogDate && workoutsForLogDate.length > 0 && (
-              <div style={{ padding: 12, borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 700, textTransform: "uppercase" }}>Logged for {workoutFormDate}</span>
-                <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.5 }}>
-                  {workoutsForLogDate.map((w) => (
-                    <li key={w.id}>
-                      <b style={{ color: "var(--text-primary)" }}>{w.name}</b> · {w.durationMinutes}m
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Workout date</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date</label>
               <input type="date" className="lock-input" value={workoutFormDate} max={today} onChange={(e) => setWorkoutFormDate(e.target.value)} />
             </div>
-            {hasAnyWorkoutLogEver && allWorkoutLogs && allWorkoutLogs.length > 0 && (
-              <div style={{ padding: 12, borderRadius: 12, background: "var(--surface-2)", fontSize: 13, color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                <div><span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Avg Mins</span><b style={{ color: "var(--text-primary)", fontSize: 15 }}>{Math.round(allWorkoutLogs.reduce((a, b) => a + b.durationMinutes, 0) / allWorkoutLogs.length)}</b></div>
-                <div><span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Total</span><b style={{ color: "var(--text-primary)", fontSize: 15 }}>{allWorkoutLogs.length}</b></div>
-              </div>
-            )}
-            {!hasAnyWorkoutLogEver && (
-              <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: 0, padding: 12, borderRadius: 12, background: "var(--surface-2)", border: "1px dashed var(--border)" }}>
-                Log one workout to see all‑time averages here.
-              </p>
-            )}
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Workout Name</label>
-              <input type="text" className="lock-input" placeholder="e.g. Push Day" value={workoutForm.name} onChange={(e) => setWorkoutForm((p) => ({ ...p, name: e.target.value }))} />
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Workout name</label>
+              <input
+                type="text"
+                className="lock-input"
+                placeholder={lastWorkout?.name ? lastWorkout.name : "Name"}
+                value={workoutForm.name}
+                onChange={(e) => setWorkoutForm((p) => ({ ...p, name: e.target.value }))}
+              />
             </div>
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Duration (mins)</label>
-              <input type="number" className="lock-input" value={workoutForm.duration} onChange={(e) => setWorkoutForm((p) => ({ ...p, duration: e.target.value }))} />
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Duration (minutes)</label>
+              <input
+                type="number"
+                className="lock-input"
+                placeholder={lastWorkout ? String(lastWorkout.durationMinutes) : "Minutes"}
+                value={workoutForm.duration}
+                onChange={(e) => setWorkoutForm((p) => ({ ...p, duration: e.target.value }))}
+              />
             </div>
             <button className="tap-scale" onClick={logWorkout} style={{ padding: 16, borderRadius: 16, background: "var(--accent)", border: "none", color: "#000", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8 }}>
-              Save Workout
+              Save workout
             </button>
           </div>
         ) : (
@@ -711,38 +707,29 @@ export default function DashboardPage() {
         <SheetTabs tab={sheetTab} setTab={setSheetTab} />
         {sheetTab === "log" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {metricFormDate === today && (quickSheet === "weight" ? weightEntryForDate : caloriesEntryForDate) && (
-              <div style={{ padding: 12, borderRadius: 12, background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", fontSize: 13, color: "var(--text-secondary)" }}>
-                <b style={{ color: "#FBBF24" }}>Logged for today</b> — edit the value below or change the date.
-              </div>
-            )}
             <div>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date for this entry</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date</label>
               <input type="date" className="lock-input" value={metricFormDate} max={today} onChange={(e) => setMetricFormDate(e.target.value)} />
             </div>
-            {(() => {
-              const history = (allMetrics || []).filter((m) => m.name === quickSheet);
-              if (history.length === 0) {
-                return (
-                  <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: 0, padding: 12, borderRadius: 12, background: "var(--surface-2)", border: "1px dashed var(--border)" }}>
-                    Log {quickSheet === "weight" ? "weight" : "calories"} at least once to see all‑time avg / high / low here.
-                  </p>
-                );
-              }
-              const avg = (history.reduce((a, b) => a + b.value, 0) / history.length).toFixed(1);
-              const max = Math.max(...history.map((m) => m.value));
-              const min = Math.min(...history.map((m) => m.value));
-              return (
-                <div style={{ padding: 12, borderRadius: 12, background: "var(--surface-2)", fontSize: 13, color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                  <div><span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Avg</span><b style={{ color: "var(--text-primary)", fontSize: 15 }}>{avg}</b></div>
-                  <div><span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>High</span><b style={{ color: "var(--text-primary)", fontSize: 15 }}>{max}</b></div>
-                  <div><span style={{ display: "block", fontSize: 10, color: "var(--text-tertiary)" }}>Low</span><b style={{ color: "var(--text-primary)", fontSize: 15 }}>{min}</b></div>
-                </div>
-              );
-            })()}
             <div>
               <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Value</label>
-              <input type="number" className="lock-input" placeholder={quickSheet === "weight" ? "e.g. 75" : "e.g. 2500"} value={metricForm.value} onChange={(e) => setMetricForm({ value: e.target.value })} />
+              <input
+                type="number"
+                className="lock-input"
+                step={quickSheet === "weight" ? "0.01" : "1"}
+                inputMode="decimal"
+                placeholder={
+                  quickSheet === "weight"
+                    ? lastWeightMetric
+                      ? lastWeightMetric.value.toFixed(2)
+                      : ""
+                    : lastCaloriesMetric
+                      ? String(Math.round(lastCaloriesMetric.value))
+                      : ""
+                }
+                value={metricForm.value}
+                onChange={(e) => setMetricForm({ value: e.target.value })}
+              />
             </div>
             <button className="tap-scale" onClick={() => logMetric(quickSheet as string)} style={{ padding: 16, borderRadius: 16, background: "var(--accent)", border: "none", color: "#000", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8 }}>
               {(quickSheet === "weight" ? weightEntryForDate : caloriesEntryForDate) ? "Update entry" : "Save"}
@@ -766,9 +753,9 @@ export default function DashboardPage() {
                 <>
                   <StatGrid
                     items={[
-                      { label: "Average", value: mStats.avg > 0 ? mStats.avg.toFixed(1) : "—" },
-                      { label: "High", value: mStats.max > 0 ? mStats.max.toFixed(1) : "—" },
-                      { label: "Low", value: mStats.max > 0 ? mStats.min.toFixed(1) : "—" },
+                      { label: "Average", value: mStats.avg > 0 ? (quickSheet === "weight" ? mStats.avg.toFixed(2) : mStats.avg.toFixed(1)) : "—" },
+                      { label: "High", value: mStats.max > 0 ? (quickSheet === "weight" ? mStats.max.toFixed(2) : mStats.max.toFixed(1)) : "—" },
+                      { label: "Low", value: mStats.max > 0 ? (quickSheet === "weight" ? mStats.min.toFixed(2) : mStats.min.toFixed(1)) : "—" },
                       { label: "Days missed*", value: String(mStats.missed) },
                     ]}
                   />
@@ -776,7 +763,7 @@ export default function DashboardPage() {
                     data={mSeries}
                     color={color}
                     valueLabel={quickSheet === "weight" ? "Weight" : "Calories"}
-                    formatValue={(v) => v.toFixed(1)}
+                    formatValue={(v) => (quickSheet === "weight" ? v.toFixed(2) : v.toFixed(1))}
                     chartKey={`${quickSheet}-analytics-${sheetTab}`}
                   />
                   <p style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.5 }}>

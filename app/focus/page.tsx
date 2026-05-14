@@ -176,6 +176,10 @@ export default function FocusPage() {
   const goalDaily = (settings?.focusGoalDailyMinutes ?? 60) * 60;
   const goalWeekly = (settings?.focusGoalWeeklyMinutes ?? 360) * 60;
   const goalMonthly = (settings?.focusGoalMonthlyMinutes ?? 1400) * 60;
+  const showGoalDaily = settings?.focusShowDailyBar !== false;
+  const showGoalWeekly = settings?.focusShowWeeklyBar !== false;
+  const showGoalMonthly = settings?.focusShowMonthlyBar !== false;
+  const anyFocusGoalBar = showGoalDaily || showGoalWeekly || showGoalMonthly;
 
   const byDate = Object.fromEntries((focusRows || []).map((r) => [r.date, r.seconds]));
   const todaySecs = byDate[today] ?? 0;
@@ -330,19 +334,29 @@ export default function FocusPage() {
       </div>
 
       {/* Goals */}
+      {anyFocusGoalBar ? (
       <div className="glass" style={{ borderRadius: 18, padding: 16, marginBottom: 22, display: "flex", flexDirection: "column", gap: 12 }}>
         <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 1 }}>Deep work goals</p>
-        <GoalBar label="Today" done={todaySecs} goal={goalDaily} pct={pct(todaySecs, goalDaily)} />
-        <GoalBar label="This week" done={weekSecs} goal={goalWeekly} pct={pct(weekSecs, goalWeekly)} />
-        <GoalBar label="This month" done={monthSecs} goal={goalMonthly} pct={pct(monthSecs, goalMonthly)} />
+        {showGoalDaily && <GoalBar label="Today" done={todaySecs} goal={goalDaily} pct={pct(todaySecs, goalDaily)} />}
+        {showGoalWeekly && <GoalBar label="This week" done={weekSecs} goal={goalWeekly} pct={pct(weekSecs, goalWeekly)} />}
+        {showGoalMonthly && <GoalBar label="This month" done={monthSecs} goal={goalMonthly} pct={pct(monthSecs, goalMonthly)} />}
         <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-          Change daily / weekly / monthly targets in{" "}
+          Change targets and which bars appear in{" "}
           <Link href="/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
-            Settings → Focus goals
+            Settings
           </Link>
           .
         </p>
       </div>
+      ) : (
+        <div className="glass" style={{ borderRadius: 18, padding: 14, marginBottom: 22, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+          No goal bars enabled. Turn them on under{" "}
+          <Link href="/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
+            Settings → Focus goals
+          </Link>
+          .
+        </div>
+      )}
 
       <div className="glass" style={{ borderRadius: 20, padding: 20, marginBottom: 24, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
