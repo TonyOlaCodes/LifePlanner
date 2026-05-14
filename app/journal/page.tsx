@@ -3,6 +3,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, useEffect } from "react";
 import { db, getTodayString } from "@/lib/db";
+import { verifyJournalPassword, upgradeLegacyJournalPasswordIfNeeded } from "@/lib/journalAuth";
+import { matchesJournalDailyUnlock } from "@/lib/journalUnlock";
 import { vibrate, formatDate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { Plus, Trash2, Pencil } from "lucide-react";
@@ -108,12 +110,19 @@ export default function JournalPage() {
       <div style={{ padding:"60px 20px", textAlign:"center", marginTop:"20vh" }}>
         <div style={{ fontSize:56, marginBottom:16 }}>🔒</div>
         <h1 style={{ fontSize:24, fontWeight:800 }}>Locked</h1>
-        <p style={{ color:"var(--text-secondary)", fontSize:14, marginBottom:24 }}>Enter your password to access your journal.</p>
-        <input type="password" value={passInput} onChange={e=>{setPassInput(e.target.value); setPassError(false);}} className="lock-input" style={{ textAlign:"center", letterSpacing:4, borderColor: passError ? "#EF4444" : undefined, fontSize:20 }} placeholder="Password" />
-        {passError && <p style={{ color:"#EF4444", fontSize:12, marginTop:8 }}>Incorrect password</p>}
-        <button className="tap-scale" onClick={()=>{
-          if (passInput === settings.journalPassword) setUnlocked(true);
-          else { setPassError(true); setPassInput(""); vibrate([30,50,30]); }
+        <p style={{ color:"var(--text-secondary)", fontSize:14, marginBottom:12 }}>Enter your journal password — or your daily key: letters/digits of your profile name plus today's date (day only), e.g. <b style={{color:"var(--text-primary)"}}>tony14</b> on the 14th.</p>
+        <input type="password" value={passInput} onChange={e=>{setPassInput(e.target.value); setPassError(false);}} className="lock-input" style={{ textAlign:"center", letterSpacing:2, borderColor: passError ? "#EF4444" : undefined, fontSize:18 }} placeholder="Password or daily key" />
+        {passError && <p style={{ color:"#EF4444", fontSize:12, marginTop:8 }}>Incorrect password or key</p>}
+        <button className="tap-scale" onClick={async ()=>{
+          const bypass = matchesJournalDailyUnlock(passInput, settings.userName || "");
+          const ok = bypass || (await verifyJournalPassword(passInput, settings.journalPassword));
+          if (ok) {
+            if (!bypass) await upgradeLegacyJournalPasswordIfNeeded(passInput, settings.journalPassword);
+            setUnlocked(true);
+            setPassInput("");
+          } else {
+            setPassError(true); setPassInput(""); vibrate([30,50,30]);
+          }
         }} style={{ padding:16, borderRadius:16, background:"var(--accent)", border:"none", color:"#000", fontSize:15, fontWeight:700, cursor:"pointer", width:"100%", marginTop:16 }}>Unlock</button>
       </div>
     );

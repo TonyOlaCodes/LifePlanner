@@ -158,12 +158,12 @@ textarea.lock-input {
 }
 .flicker { animation: flicker 0.8s ease-in-out infinite; }
 
-/* Slide in from bottom */
+/* Slide in from bottom — keep translateX(-50%) so sheet stays centered (do not overwrite horizontal centering). */
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translate(-50%, 18px); opacity: 0.88; }
+  to { transform: translate(-50%, 0); opacity: 1; }
 }
-.slide-up { animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.slide-up { animation: slideUp 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
 /* Fade in */
 @keyframes fadeIn {
@@ -184,7 +184,7 @@ textarea.lock-input {
   position: fixed;
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, 0);
   width: 100%;
   max-width: 430px;
   background: var(--surface);
@@ -234,4 +234,21 @@ textarea.lock-input {
 .no-select {
   user-select: none;
   -webkit-user-select: none;
+}
+
+@keyframes task-due-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.35), 0 0 22px rgba(239, 68, 68, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(239, 68, 68, 0.55), 0 0 32px rgba(239, 68, 68, 0.22);
+  }
+}
+
+.task-due-soon {
+  animation: task-due-pulse 2s ease-in-out infinite;
+}
+
+.task-due-overdue {
+  animation: task-due-pulse 1.5s ease-in-out infinite;
 }

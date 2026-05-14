@@ -40,23 +40,7 @@ export function vibrate(pattern: number | number[] = 50) {
   }
 }
 
-export const QUOTES = [
-  "Discipline is choosing between what you want now and what you want most.",
-  "Every day is a chance to be better than yesterday.",
-  "Lock in. No distractions. No excuses.",
-  "The pain of discipline is far less than the pain of regret.",
-  "Your future self is watching you right now.",
-  "Consistency beats intensity every time.",
-  "Work in silence. Let results make the noise.",
-  "You don't rise to the level of your goals, you fall to the level of your systems.",
-  "Small wins, daily. That's the formula.",
-  "The grind never stops. Nor should you.",
-];
-
-export function getDailyQuote(): string {
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-  return QUOTES[dayOfYear % QUOTES.length];
-}
+export { getRotatingQuote, MOTIVATIONAL_QUOTES } from "./motivationalQuotes";
 
 export const CATEGORY_CONFIG = {
   sleep:      { label: "Sleep",      emoji: "😴", color: "#6366F1" },

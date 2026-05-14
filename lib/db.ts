@@ -117,6 +117,11 @@ export interface ContentPost {
   notes?: string;
 }
 
+export interface FocusDayLog {
+  date: string;
+  seconds: number;
+}
+
 export interface AppSettings {
   id: 1;
   accentColor: string;
@@ -128,9 +133,20 @@ export interface AppSettings {
   notificationsEnabled: boolean;
   reminderTime: string;
   userName: string;
+  /** PBKDF2 hash (`lockin$v1$...`) or legacy plaintext until migrated */
   journalPassword?: string;
   totalFocusMinutes?: number;
   totalFocusSeconds?: number;
+  /** Deep work targets (minutes) */
+  focusGoalDailyMinutes?: number;
+  focusGoalWeeklyMinutes?: number;
+  focusGoalMonthlyMinutes?: number;
+  /** Which quick-log tiles appear on Home (subset of sleep | workout | weight | calories) */
+  quickLogKeys?: ("sleep" | "workout" | "weight" | "calories")[];
+  /** True after first-install starter pack was applied or skipped */
+  bootstrapPackApplied?: boolean;
+  /** First day we attribute insights / “missed” to (YYYY-MM-DD); set on install or inferred once for existing data */
+  accountStartDate?: string;
 }
 
 export class LockInDatabase extends Dexie {
@@ -147,6 +163,7 @@ export class LockInDatabase extends Dexie {
   contentPosts!: Table<ContentPost, string>;
   metricsLogs!: Table<MetricLog, string>;
   settings!: Table<AppSettings, number>;
+  focusDaily!: Table<FocusDayLog, string>;
 
   constructor() {
     super("LockInDB");
@@ -167,6 +184,9 @@ export class LockInDatabase extends Dexie {
     this.version(2).stores({
       metricsLogs: "id, date, name",
     });
+    this.version(3).stores({
+      focusDaily: "date",
+    });
   }
 }
 
@@ -175,7 +195,15 @@ export const db = new LockInDatabase();
 // Initialize default settings if not exists
 export async function initializeSettings(): Promise<AppSettings> {
   const existing = await db.settings.get(1);
-  if (existing) return existing;
+  const today = getTodayString();
+  if (existing) {
+    if (!existing.accountStartDate) {
+      const inferred = await inferEarliestActivityDate();
+      await db.settings.update(1, { accountStartDate: inferred });
+      return { ...existing, accountStartDate: inferred };
+    }
+    return existing;
+  }
   const defaults: AppSettings = {
     id: 1,
     accentColor: "#6EE7B7",
@@ -187,6 +215,12 @@ export async function initializeSettings(): Promise<AppSettings> {
     notificationsEnabled: false,
     reminderTime: "08:00",
     userName: "Champion",
+    focusGoalDailyMinutes: 60,
+    focusGoalWeeklyMinutes: 360,
+    focusGoalMonthlyMinutes: 1400,
+    quickLogKeys: ["sleep", "workout", "weight", "calories"],
+    bootstrapPackApplied: false,
+    accountStartDate: today,
   };
   await db.settings.put(defaults);
   return defaults;
@@ -207,8 +241,80 @@ export async function seedDefaultHabits() {
   await db.habits.bulkPut(defaults);
 }
 
+/** First install: default habits + two starter tasks + welcome journal entry. */
+export async function seedBootstrapPack() {
+  const s = await db.settings.get(1);
+  if (s?.bootstrapPackApplied) return;
+  const [hc, tc, jc] = await Promise.all([db.habits.count(), db.tasks.count(), db.journalEntries.count()]);
+  if (hc > 0 || tc > 0 || jc > 0) {
+    await db.settings.update(1, { bootstrapPackApplied: true });
+    return;
+  }
+  await seedDefaultHabits();
+  const today = getTodayString();
+  await db.tasks.bulkPut([
+    {
+      id: crypto.randomUUID(),
+      title: "Pick your top 3 priorities for today",
+      category: "personal",
+      dueDate: today,
+      completed: false,
+      priority: "high",
+      createdAt: Date.now(),
+    },
+    {
+      id: crypto.randomUUID(),
+      title: "Skim the Habits tab and adjust days",
+      category: "study",
+      dueDate: today,
+      completed: false,
+      priority: "medium",
+      createdAt: Date.now() + 1,
+    },
+  ]);
+  await db.journalEntries.put({
+    id: crypto.randomUUID(),
+    date: today,
+    content:
+      "Welcome to your private journal. One line today: note one thing you're grateful for, however small.",
+    moodScore: 7,
+    tags: ["welcome"],
+    createdAt: Date.now(),
+  });
+  await db.settings.update(1, { bootstrapPackApplied: true });
+}
+
+export async function addFocusSecondsForDate(date: string, deltaSeconds: number) {
+  if (deltaSeconds <= 0) return;
+  const row = await db.focusDaily.get(date);
+  const next = (row?.seconds ?? 0) + deltaSeconds;
+  await db.focusDaily.put({ date, seconds: next });
+}
+
 export function getTodayString(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+/** Earliest calendar day we can infer from local data (for backfilling accountStartDate). */
+export async function inferEarliestActivityDate(): Promise<string> {
+  const today = getTodayString();
+  const candidates: string[] = [];
+  const pushFromMs = (ms: number | undefined) => {
+    if (!ms) return;
+    candidates.push(new Date(ms).toISOString().split("T")[0]!);
+  };
+  const h = await db.habits.orderBy("createdAt").first();
+  pushFromMs(h?.createdAt);
+  const t = await db.tasks.orderBy("createdAt").first();
+  pushFromMs(t?.createdAt);
+  const j = await db.journalEntries.orderBy("createdAt").first();
+  pushFromMs(j?.createdAt);
+  const sl = await db.sleepLogs.orderBy("date").first();
+  if (sl?.date) candidates.push(sl.date);
+  const hl = await db.habitLogs.orderBy("date").first();
+  if (hl?.date) candidates.push(hl.date);
+  if (!candidates.length) return today;
+  return candidates.reduce((a, b) => (a < b ? a : b));
 }
 
 export function getStreakForHabit(logs: HabitLog[], habitId: string): number {

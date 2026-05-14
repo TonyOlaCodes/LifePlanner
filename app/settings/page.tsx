@@ -1,10 +1,14 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useState } from "react";
-import { db } from "@/lib/db";
+import { useState, useEffect } from "react";
+import { db, initializeSettings } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
-import { Download, Upload, Trash2, Bell, Palette, User, Moon, Zap, ChevronRight, Lock } from "lucide-react";
+import BottomSheet from "@/components/ui/BottomSheet";
+import { hashJournalPassword, verifyJournalPassword } from "@/lib/journalAuth";
+import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid } from "lucide-react";
+
+const CLEAR_CONFIRM_PHRASE = "CLEAR ALL DATA";
 
 const ACCENT_PRESETS = [
   { name:"Emerald", value:"#6EE7B7" },
@@ -19,18 +23,139 @@ const ACCENT_PRESETS = [
   { name:"White",   value:"#E4E4E7" },
 ];
 
+const FORGOT_JOURNAL_PHRASE = "RESET MY JOURNAL LOCK";
+
 export default function SettingsPage() {
   const settings = useLiveQuery(()=>db.settings.get(1),[]);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [exportMsg, setExportMsg] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [clearSheetOpen, setClearSheetOpen] = useState(false);
+  const [clearPhraseInput, setClearPhraseInput] = useState("");
+  const [journalCurrent, setJournalCurrent] = useState("");
+  const [journalNew, setJournalNew] = useState("");
+  const [journalConfirm, setJournalConfirm] = useState("");
+  const [journalNote, setJournalNote] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [forgotJournalOpen, setForgotJournalOpen] = useState(false);
+  const [forgotJournalPhrase, setForgotJournalPhrase] = useState("");
+  const [focusDaily, setFocusDaily] = useState("60");
+  const [focusWeekly, setFocusWeekly] = useState("360");
+  const [focusMonthly, setFocusMonthly] = useState("1400");
+
+  useEffect(() => {
+    if (!settings) return;
+    setFocusDaily(String(settings.focusGoalDailyMinutes ?? 60));
+    setFocusWeekly(String(settings.focusGoalWeeklyMinutes ?? 360));
+    setFocusMonthly(String(settings.focusGoalMonthlyMinutes ?? 1400));
+  }, [settings]);
 
   if (!settings) return <div style={{ padding:40, textAlign:"center", color:"var(--text-secondary)" }}>Loading…</div>;
 
   async function update(patch: Partial<typeof settings>) {
     vibrate(30);
     await db.settings.update(1, patch as any);
+  }
+
+  async function saveJournalLock() {
+    const s = settings;
+    if (!s) return;
+    setJournalNote(null);
+    const hasLock = !!s.journalPassword?.length;
+    if (hasLock) {
+      const curOk = await verifyJournalPassword(journalCurrent, s.journalPassword);
+      if (!curOk) {
+        setJournalNote({ type: "err", text: "Current password is wrong." });
+        vibrate([40, 40, 40]);
+        return;
+      }
+      if (!journalNew.trim()) {
+        setJournalNote({ type: "err", text: "Enter a new password to change it, or use “Forgot password” to remove the lock." });
+        return;
+      }
+      if (journalNew !== journalConfirm) {
+        setJournalNote({ type: "err", text: "New passwords do not match." });
+        return;
+      }
+      if (journalNew.length < 4) {
+        setJournalNote({ type: "err", text: "Use at least 4 characters." });
+        return;
+      }
+      const hashed = await hashJournalPassword(journalNew);
+      await db.settings.update(1, { journalPassword: hashed });
+      setJournalCurrent("");
+      setJournalNew("");
+      setJournalConfirm("");
+      setJournalNote({ type: "ok", text: "Journal lock updated." });
+      vibrate(40);
+      return;
+    }
+    if (!journalNew.trim()) {
+      setJournalNote({ type: "err", text: "Choose a password." });
+      return;
+    }
+    if (journalNew !== journalConfirm) {
+      setJournalNote({ type: "err", text: "Passwords do not match." });
+      return;
+    }
+    if (journalNew.length < 4) {
+      setJournalNote({ type: "err", text: "Use at least 4 characters." });
+      return;
+    }
+    const hashed = await hashJournalPassword(journalNew);
+    await db.settings.update(1, { journalPassword: hashed });
+    setJournalNew("");
+    setJournalConfirm("");
+    setJournalNote({ type: "ok", text: "Journal lock created (stored hashed on this device only)." });
+    vibrate(40);
+  }
+
+  async function confirmForgotJournal() {
+    if (forgotJournalPhrase !== FORGOT_JOURNAL_PHRASE) return;
+    vibrate([50, 50, 50]);
+    await db.journalEntries.clear();
+    await db.settings.update(1, { journalPassword: "" });
+    setForgotJournalOpen(false);
+    setForgotJournalPhrase("");
+    setJournalCurrent("");
+    setJournalNew("");
+    setJournalConfirm("");
+    setJournalNote({ type: "ok", text: "Journal lock removed and all journal entries were deleted." });
+  }
+
+  const quickKeys = settings!.quickLogKeys ?? (["sleep", "workout", "weight", "calories"] as const);
+  const QUICK_OPTIONS = [
+    { key: "sleep" as const, label: "Sleep" },
+    { key: "workout" as const, label: "Workout" },
+    { key: "weight" as const, label: "Weight" },
+    { key: "calories" as const, label: "Calories" },
+  ];
+
+  function toggleQuickKey(key: (typeof QUICK_OPTIONS)[number]["key"]) {
+    const s = settings;
+    if (!s) return;
+    const set = new Set(s.quickLogKeys ?? ["sleep", "workout", "weight", "calories"]);
+    if (set.has(key)) {
+      if (set.size <= 1) {
+        setJournalNote({ type: "err", text: "Keep at least one quick-log button on Home." });
+        return;
+      }
+      set.delete(key);
+    } else set.add(key);
+    void update({ quickLogKeys: [...set] as ("sleep" | "workout" | "weight" | "calories")[] });
+  }
+
+  async function saveFocusGoals() {
+    vibrate(30);
+    const d = Math.max(1, parseInt(focusDaily, 10) || 60);
+    const w = Math.max(1, parseInt(focusWeekly, 10) || 360);
+    const m = Math.max(1, parseInt(focusMonthly, 10) || 1400);
+    await db.settings.update(1, {
+      focusGoalDailyMinutes: d,
+      focusGoalWeeklyMinutes: w,
+      focusGoalMonthlyMinutes: m,
+    });
+    setJournalNote({ type: "ok", text: "Focus goals saved." });
+    setTimeout(() => setJournalNote(null), 2500);
   }
 
   async function saveName() {
@@ -76,15 +201,30 @@ export default function SettingsPage() {
     }
   }
 
-  async function clearAllData() {
-    if (!confirm("Are you sure? This will delete ALL your data permanently.")) return;
+  async function clearAllDataConfirmed() {
+    if (clearPhraseInput !== CLEAR_CONFIRM_PHRASE) return;
+    vibrate([35, 35, 35]);
     await Promise.all([
-      db.habits.clear(), db.habitLogs.clear(), db.sleepLogs.clear(),
-      db.workoutLogs.clear(), db.tasks.clear(), db.journalEntries.clear(),
-      db.disciplineLogs.clear(), db.exams.clear()
+      db.habits.clear(),
+      db.habitLogs.clear(),
+      db.sleepLogs.clear(),
+      db.workoutLogs.clear(),
+      db.personalRecords.clear(),
+      db.studySessions.clear(),
+      db.exams.clear(),
+      db.tasks.clear(),
+      db.journalEntries.clear(),
+      db.disciplineLogs.clear(),
+      db.contentPosts.clear(),
+      db.metricsLogs.clear(),
+      db.settings.clear(),
+      db.focusDaily.clear(),
     ]);
-    setExportMsg("All data cleared");
-    setTimeout(()=>setExportMsg(""),3000);
+    await initializeSettings();
+    setClearSheetOpen(false);
+    setClearPhraseInput("");
+    setExportMsg("Everything was reset. Settings restored to defaults.");
+    setTimeout(() => setExportMsg(""), 5000);
   }
 
   return (
@@ -121,40 +261,91 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* Theme */}
-      <Section title="Theme" icon={<Moon size={15}/>}>
-        <div style={{ display:"flex", gap:8 }}>
-          {([{v:"oled",l:"OLED Black"},{v:"dark",l:"Deep Dark"}] as const).map(t=>(
-            <button key={t.v} onClick={()=>update({theme:t.v})}
-              style={{ flex:1, padding:"12px 8px", borderRadius:14, border:`1px solid ${settings.theme===t.v?"var(--accent)":"var(--border)"}`, background:settings.theme===t.v?"var(--accent)":"var(--surface-3)", color:settings.theme===t.v?"#000":"var(--text-secondary)", fontWeight:700, fontSize:13, cursor:"pointer" }}>{t.l}</button>
+      {/* Focus goals */}
+      <Section title="Focus goals" icon={<Target size={15} />}>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
+          Targets for deep work on the Focus tab (minutes). Weekly and monthly caps should usually be larger than daily × 7 or × 30.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Daily goal (minutes)</label>
+            <input type="number" min={1} className="lock-input" value={focusDaily} onChange={(e) => setFocusDaily(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Weekly goal (minutes)</label>
+            <input type="number" min={1} className="lock-input" value={focusWeekly} onChange={(e) => setFocusWeekly(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Monthly goal (minutes)</label>
+            <input type="number" min={1} className="lock-input" value={focusMonthly} onChange={(e) => setFocusMonthly(e.target.value)} />
+          </div>
+          <button type="button" className="tap-scale" onClick={() => void saveFocusGoals()}
+            style={{ width: "100%", padding: 14, borderRadius: 14, background: "var(--accent)", border: "none", color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            Save focus goals
+          </button>
+        </div>
+      </Section>
+
+      {/* Security — journal lock */}
+      <Section title="Security" icon={<Lock size={15}/>}>
+        <p style={{ fontSize:13, color:"var(--text-secondary)", lineHeight:1.5, margin:"0 0 14px" }}>
+          The journal password is hashed on this device. To change it, you must enter the current one. If you forgot it, you can only remove the lock by deleting all journal entries (cannot be undone).
+        </p>
+        {settings.journalPassword ? (
+          <>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Current password</label>
+            <input type="password" className="lock-input" value={journalCurrent} onChange={(e) => setJournalCurrent(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>New password</label>
+            <input type="password" className="lock-input" value={journalNew} onChange={(e) => setJournalNew(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm new password</label>
+            <input type="password" className="lock-input" value={journalConfirm} onChange={(e) => setJournalConfirm(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
+          </>
+        ) : (
+          <>
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Create password</label>
+            <input type="password" className="lock-input" value={journalNew} onChange={(e) => setJournalNew(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
+            <label style={{ fontSize:12, color:"var(--text-tertiary)", display:"block", marginBottom:6 }}>Confirm password</label>
+            <input type="password" className="lock-input" value={journalConfirm} onChange={(e) => setJournalConfirm(e.target.value)} style={{ marginBottom:12 }} autoComplete="off" />
+          </>
+        )}
+        <button type="button" className="tap-scale" onClick={() => void saveJournalLock()}
+          style={{ width:"100%", padding:14, borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:"pointer", marginBottom:10 }}>
+          {settings.journalPassword ? "Update journal lock" : "Create journal lock"}
+        </button>
+        {settings.journalPassword && (
+          <button type="button" className="tap-scale" onClick={() => { setForgotJournalPhrase(""); setForgotJournalOpen(true); }}
+            style={{ width:"100%", padding:12, borderRadius:12, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            Forgot password?
+          </button>
+        )}
+        {journalNote && (
+          <p style={{ margin:"12px 0 0", fontSize:13, fontWeight:600, color: journalNote.type === "ok" ? "var(--accent)" : "#F87171" }}>{journalNote.text}</p>
+        )}
+      </Section>
+
+      <Section title="Home quick log" icon={<LayoutGrid size={15}/>}>
+        <p style={{ fontSize:13, color:"var(--text-secondary)", marginBottom:12 }}>Choose which buttons show on the dashboard row (at least one).</p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          {QUICK_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => toggleQuickKey(o.key)}
+              style={{
+                padding:"10px 14px",
+                borderRadius:12,
+                border:`1px solid ${quickKeys.includes(o.key) ? "var(--accent)" : "var(--border)"}`,
+                background: quickKeys.includes(o.key) ? "var(--accent)" : "var(--surface-3)",
+                color: quickKeys.includes(o.key) ? "#000" : "var(--text-secondary)",
+                fontWeight:600,
+                fontSize:13,
+                cursor:"pointer",
+              }}
+            >
+              {o.label}
+            </button>
           ))}
         </div>
-      </Section>
-
-      {/* Preferences */}
-      <Section title="Preferences" icon={<Zap size={15}/>}>
-        <ToggleRow label="Motivational quotes" value={settings.motivationalQuotes} onChange={v=>update({motivationalQuotes:v})} />
-        <ToggleRow label="Haptic feedback" value={settings.haptics} onChange={v=>update({haptics:v})} />
-      </Section>
-
-      {/* Security */}
-      <Section title="Security" icon={<Lock size={15}/>}>
-        <p style={{ fontSize:13, color:"var(--text-secondary)", marginBottom:8 }}>Journal Password</p>
-        <div style={{ display:"flex", gap:8 }}>
-          <input type="password" placeholder={settings.journalPassword ? "••••••••" : "No password set"} className="lock-input" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{ flex:1 }} />
-          <button className="tap-scale" onClick={async () => {
-            if (!newPassword) {
-              if (confirm("Remove journal password?")) {
-                await update({ journalPassword: "" });
-              }
-            } else {
-              await update({ journalPassword: newPassword });
-              setNewPassword("");
-              alert("Password saved!");
-            }
-          }} style={{ padding:"14px 18px", borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:"pointer" }}>Save</button>
-        </div>
-        <p style={{ fontSize:11, color:"var(--text-tertiary)", marginTop:8 }}>To reset or remove the password, enter a new one or leave blank and click Save.</p>
       </Section>
 
       {/* Data */}
@@ -170,12 +361,82 @@ export default function SettingsPage() {
             <Upload size={18} style={{color:"#8B5CF6"}} /> Import Data from JSON
             <input type="file" accept=".json" style={{ display:"none" }} onChange={importData} />
           </label>
-          <button className="tap-scale" onClick={clearAllData}
+          <button className="tap-scale" onClick={() => { setClearPhraseInput(""); setClearSheetOpen(true); }}
             style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 16px", borderRadius:14, background:"#EF444410", border:"1px solid #EF444420", cursor:"pointer", color:"#EF4444", fontSize:14, fontWeight:600 }}>
             <Trash2 size={18} /> Clear All Data
           </button>
         </div>
       </Section>
+
+      <BottomSheet open={forgotJournalOpen} onClose={() => { setForgotJournalOpen(false); setForgotJournalPhrase(""); }} title="Remove journal lock">
+        <p style={{ fontSize:14, color:"var(--text-secondary)", lineHeight:1.55, margin:"0 0 12px" }}>
+          This permanently deletes <span style={{ fontWeight: 800 }}>all journal entries</span> and removes the lock. There is no recovery. Type exactly:
+        </p>
+        <p style={{ fontSize:12, fontWeight:800, color:"#F87171", margin:"0 0 10px", letterSpacing:0.2 }}>{FORGOT_JOURNAL_PHRASE}</p>
+        <input
+          type="text"
+          className="lock-input"
+          autoComplete="off"
+          spellCheck={false}
+          value={forgotJournalPhrase}
+          onChange={(e) => setForgotJournalPhrase(e.target.value)}
+          style={{ marginBottom:14 }}
+        />
+        <button
+          type="button"
+          className="tap-scale"
+          disabled={forgotJournalPhrase !== FORGOT_JOURNAL_PHRASE}
+          onClick={() => void confirmForgotJournal()}
+          style={{
+            width:"100%",
+            padding:14,
+            borderRadius:14,
+            background: forgotJournalPhrase === FORGOT_JOURNAL_PHRASE ? "#DC2626" : "var(--surface-3)",
+            border:"1px solid rgba(239,68,68,0.35)",
+            color: forgotJournalPhrase === FORGOT_JOURNAL_PHRASE ? "#fff" : "var(--text-tertiary)",
+            fontWeight:700,
+            cursor: forgotJournalPhrase === FORGOT_JOURNAL_PHRASE ? "pointer" : "not-allowed",
+          }}
+        >
+          Delete all journal entries and remove lock
+        </button>
+      </BottomSheet>
+
+      <BottomSheet open={clearSheetOpen} onClose={() => { setClearSheetOpen(false); setClearPhraseInput(""); }} title="Erase everything?">
+        <p style={{ fontSize:14, color:"var(--text-secondary)", lineHeight:1.5, margin:"0 0 12px" }}>
+          This deletes habits, logs, tasks, journal, workouts, metrics, and settings on this device. Type the phrase below exactly (all caps) to confirm.
+        </p>
+        <p style={{ fontSize:12, fontWeight:700, color:"#F87171", margin:"0 0 8px", letterSpacing:0.3 }}>{CLEAR_CONFIRM_PHRASE}</p>
+        <input
+          type="text"
+          className="lock-input"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder={CLEAR_CONFIRM_PHRASE}
+          value={clearPhraseInput}
+          onChange={(e) => setClearPhraseInput(e.target.value)}
+          style={{ marginBottom:14 }}
+        />
+        <button
+          className="tap-scale"
+          onClick={clearAllDataConfirmed}
+          disabled={clearPhraseInput !== CLEAR_CONFIRM_PHRASE}
+          style={{
+            padding:16,
+            borderRadius:14,
+            background: clearPhraseInput === CLEAR_CONFIRM_PHRASE ? "#DC2626" : "var(--surface-3)",
+            border: "1px solid rgba(239,68,68,0.35)",
+            color: clearPhraseInput === CLEAR_CONFIRM_PHRASE ? "#fff" : "var(--text-tertiary)",
+            fontSize:15,
+            fontWeight:700,
+            cursor: clearPhraseInput === CLEAR_CONFIRM_PHRASE ? "pointer" : "not-allowed",
+            width:"100%",
+          }}
+        >
+          Reset device data
+        </button>
+      </BottomSheet>
 
       <div style={{ textAlign:"center", paddingTop:20, paddingBottom:32 }}>
         <p style={{ color:"var(--text-tertiary)", fontSize:12 }}>Lock In — Local only. Your data stays on your device.</p>
@@ -197,14 +458,3 @@ function Section({ title, icon, children }: { title:string; icon:React.ReactNode
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label:string; value:boolean; onChange:(v:boolean)=>void }) {
-  return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingBottom:14, marginBottom:14, borderBottom:"1px solid var(--border)" }}>
-      <span style={{ fontSize:14, fontWeight:500 }}>{label}</span>
-      <button onClick={()=>onChange(!value)}
-        style={{ width:48, height:28, borderRadius:100, background:value?"var(--accent)":"var(--surface-3)", border:`1px solid ${value?"var(--accent)":"var(--border)"}`, cursor:"pointer", position:"relative", transition:"all 0.25s ease" }}>
-        <div style={{ width:22, height:22, borderRadius:"50%", background:value?"#000":"var(--text-tertiary)", position:"absolute", top:2, left:value?22:2, transition:"left 0.25s cubic-bezier(0.34,1.56,0.64,1)" }} />
-      </button>
-    </div>
-  );
-}

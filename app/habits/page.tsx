@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { db, getTodayString, getStreakForHabit, Habit } from "@/lib/db";
+import { db, getTodayString, getStreakForHabit, type Habit } from "@/lib/db";
 import { CATEGORY_CONFIG, vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
@@ -47,16 +47,24 @@ export default function HabitsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editEmojiOpen, setEditEmojiOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState<Habit | null>(null);
   const [form, setForm] = useState({ title:"", emoji:"⭐", category:"custom" as Habit["category"], frequency: [...DAYS], color: COLORS[0] });
-  const [editForm, setEditForm] = useState({ emoji:"", frequency: [] as string[], color:"" });
+  /** One object so active days / color / emoji stay in sync when opening edit (avoids stale split state). */
+  const [habitEdit, setHabitEdit] = useState<{
+    id: string;
+    title: string;
+    emoji: string;
+    frequency: string[];
+    color: string;
+  } | null>(null);
 
   const habits = useLiveQuery(() => db.habits.orderBy("order").toArray(), []);
   const todayLogs = useLiveQuery(() => db.habitLogs.where("date").equals(today).toArray(), [today]);
   const allLogs = useLiveQuery(() => db.habitLogs.toArray(), []);
+  const settings = useLiveQuery(() => db.settings.get(1), []);
+  const accountStart = settings?.accountStartDate ?? today;
 
-  const todayHabits = (habits||[]).filter(h => h.frequency.includes(TODAY_KEY));
-  const completedIds = (todayLogs||[]).filter(l => l.completed && todayHabits.some(h => h.id === l.habitId)).map(l => l.habitId);
+  const todayHabits = (habits || []).filter((h) => Array.isArray(h.frequency) && h.frequency.includes(TODAY_KEY));
+  const completedIdsToday = (todayLogs || []).filter((l) => l.completed).map((l) => l.habitId);
 
   // Weekly: Last 7 days
   const last7 = Array.from({ length:7 }, (_,i) => {
@@ -93,15 +101,15 @@ export default function HabitsPage() {
   }
 
   async function saveEdit() {
-    if (!editOpen) return;
+    if (!habitEdit) return;
     vibrate(50);
-    await db.habits.update(editOpen.id, {
-      emoji: editForm.emoji,
-      frequency: editForm.frequency,
-      color: editForm.color,
+    await db.habits.update(habitEdit.id, {
+      emoji: habitEdit.emoji,
+      frequency: habitEdit.frequency,
+      color: habitEdit.color,
     });
     setEditEmojiOpen(false);
-    setEditOpen(null);
+    setHabitEdit(null);
   }
 
   async function deleteHabit(id: string) {
@@ -112,9 +120,18 @@ export default function HabitsPage() {
 
   function openEdit(habit: Habit, e: React.MouseEvent) {
     e.stopPropagation();
-    setEditForm({ emoji: habit.emoji, frequency: [...habit.frequency], color: habit.color });
+    const raw = habit.frequency;
+    const frequency = Array.isArray(raw)
+      ? DAYS.filter((d) => raw.includes(d))
+      : [];
     setEditEmojiOpen(false);
-    setEditOpen(habit);
+    setHabitEdit({
+      id: habit.id,
+      title: habit.title,
+      emoji: habit.emoji,
+      frequency,
+      color: habit.color,
+    });
   }
 
   function toggleFormDay(day: string) {
@@ -122,17 +139,21 @@ export default function HabitsPage() {
   }
 
   function toggleEditDay(day: string) {
-    setEditForm(f => ({ ...f, frequency: f.frequency.includes(day) ? f.frequency.filter(d=>d!==day) : [...f.frequency, day] }));
+    setHabitEdit((f) => {
+      if (!f) return f;
+      const frequency = f.frequency.includes(day) ? f.frequency.filter((d) => d !== day) : [...f.frequency, day];
+      return { ...f, frequency };
+    });
   }
 
   const grouped = Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => {
-    const catHabits = (habits||[]).filter(h => h.category === key);
+    const catHabits = (habits || []).filter((h) => h.category === key);
     const sorted = [
-      ...catHabits.filter(h => !completedIds.includes(h.id)),
-      ...catHabits.filter(h =>  completedIds.includes(h.id)),
+      ...catHabits.filter((h) => !completedIdsToday.includes(h.id)),
+      ...catHabits.filter((h) => completedIdsToday.includes(h.id)),
     ];
     return { key, cfg, habits: sorted };
-  }).filter(g => g.habits.length > 0);
+  }).filter((g) => g.habits.length > 0);
 
   return (
     <div style={{ padding:"0 16px", paddingTop:16 }}>
@@ -141,7 +162,7 @@ export default function HabitsPage() {
         <div>
           <h1 style={{ fontSize:26, fontWeight:800, letterSpacing:-0.5, margin:0 }}>Habits 🔥</h1>
           <p style={{ color:"var(--text-secondary)", fontSize:13, margin:"4px 0 0" }}>
-            {completedIds.length}/{todayHabits.length} done today
+            {(todayLogs || []).filter((l) => l.completed).length}/{todayHabits.length} done today
           </p>
         </div>
         <button className="tap-scale" onClick={()=>setAddOpen(true)}
@@ -169,16 +190,25 @@ export default function HabitsPage() {
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {catHabits.map(habit => {
-              const done = completedIds.includes(habit.id);
+              const done = (todayLogs || []).some((l) => l.habitId === habit.id && l.completed);
               const streak = getStreakForHabit(allLogs||[], habit.id);
               const logMap = Object.fromEntries((allLogs||[]).filter(l=>l.habitId===habit.id).map(l=>[l.date,l.completed]));
               
               // Only apply partial opacity if the habit is NOT scheduled for today
-              const isScheduledToday = habit.frequency.includes(TODAY_KEY);
+              const isScheduledToday = Array.isArray(habit.frequency) && habit.frequency.includes(TODAY_KEY);
 
               return (
                 <div key={habit.id} className="tap-scale" onClick={()=>toggleHabit(habit.id)}
-                  style={{ borderRadius:20, background:done?`${habit.color}10`:"var(--surface-2)", border:`1px solid ${done?habit.color+"25":"var(--border)"}`, overflow:"hidden", opacity: done ? 0.6 : 1, transition:"all 0.25s ease", cursor:"pointer" }}>
+                  style={{
+                    borderRadius:20,
+                    background: done ? `${habit.color}22` : `linear-gradient(145deg, ${habit.color}2a 0%, var(--surface-2) 42%, var(--surface-2) 100%)`,
+                    border: `1px solid ${done ? habit.color + "55" : habit.color + "38"}`,
+                    boxShadow: done ? `inset 0 0 0 1px ${habit.color}30` : `0 0 0 1px ${habit.color}14`,
+                    overflow:"hidden",
+                    opacity: done ? 0.72 : 1,
+                    transition:"all 0.25s ease",
+                    cursor:"pointer",
+                  }}>
                   
                   <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px" }}>
                     <div className={`check-ring${done?" done":""}`} style={{ borderColor:done?habit.color:undefined, background:done?habit.color:undefined, flexShrink:0 }}>
@@ -210,10 +240,10 @@ export default function HabitsPage() {
                         const dayKey = DAYS[dObj.getDay() === 0 ? 6 : dObj.getDay()-1];
                         const createdDateStr = format(new Date(habit.createdAt), "yyyy-MM-dd");
                         const isBeforeCreation = date < createdDateStr;
-                        const scheduled = habit.frequency.includes(dayKey) && !isBeforeCreation;
+                        const scheduled = Array.isArray(habit.frequency) && habit.frequency.includes(dayKey) && !isBeforeCreation;
                         const logged = logMap[date];
                         const isPast = date < today;
-                        const missed = scheduled && !logged && isPast;
+                        const missed = scheduled && !logged && isPast && date >= accountStart;
                         return (
                           <div key={date} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
                             <div style={{ 
@@ -244,10 +274,10 @@ export default function HabitsPage() {
                           const dayKey = DAYS[dObj.getDay() === 0 ? 6 : dObj.getDay()-1];
                           const createdDateStr = format(new Date(habit.createdAt), "yyyy-MM-dd");
                           const isBeforeCreation = date < createdDateStr;
-                          const scheduled = habit.frequency.includes(dayKey) && !isBeforeCreation;
+                          const scheduled = Array.isArray(habit.frequency) && habit.frequency.includes(dayKey) && !isBeforeCreation;
                           const logged = logMap[date];
                           const isPast = date < today;
-                          const missed = scheduled && !logged && isPast;
+                          const missed = scheduled && !logged && isPast && date >= accountStart;
                           return (
                             <div key={date} style={{ display:"flex", justifyContent:"center" }}>
                               <div style={{ 
@@ -352,8 +382,8 @@ export default function HabitsPage() {
       </BottomSheet>
 
       {/* ======== EDIT HABIT SHEET ======== */}
-      <BottomSheet open={!!editOpen} onClose={()=>{setEditOpen(null);setEditEmojiOpen(false);}} title={editOpen ? `Edit: ${editOpen.title}` : ""}>
-        {editOpen && (
+      <BottomSheet open={!!habitEdit} onClose={()=>{setHabitEdit(null);setEditEmojiOpen(false);}} title={habitEdit ? `Edit: ${habitEdit.title}` : ""}>
+        {habitEdit && (
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             {/* Emoji picker */}
             <div>
@@ -361,7 +391,7 @@ export default function HabitsPage() {
               <button onClick={()=>setEditEmojiOpen(!editEmojiOpen)} className="tap-scale"
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:16, background:"var(--surface-3)", border:"1px solid var(--border)", cursor:"pointer", width:"100%" }}>
                 <div style={{ width:44, height:44, borderRadius:14, background:"var(--surface-2)", border:"2px solid var(--accent)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>
-                  {editForm.emoji}
+                  {habitEdit.emoji}
                 </div>
                 <span style={{ fontSize:13, color:"var(--text-secondary)", flex:1, textAlign:"left" }}>Tap to change icon</span>
                 {editEmojiOpen ? <ChevronUp size={16} style={{color:"var(--text-tertiary)"}} /> : <ChevronDown size={16} style={{color:"var(--text-tertiary)"}} />}
@@ -369,8 +399,8 @@ export default function HabitsPage() {
               {editEmojiOpen && (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(8, 1fr)", gap:6, marginTop:10, maxHeight:200, overflowY:"auto", padding:"4px 2px" }}>
                   {EMOJI_LIST.map(e => (
-                    <button key={e} onClick={() => { setEditForm(f => ({...f, emoji: e})); setEditEmojiOpen(false); }}
-                      style={{ fontSize:22, padding:"8px 0", borderRadius:12, border:`2px solid ${editForm.emoji===e ? "var(--accent)" : "transparent"}`, background: editForm.emoji===e ? "rgba(110,231,183,0.15)" : "var(--surface-3)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s ease" }}>
+                    <button key={e} onClick={() => { setHabitEdit((f) => (f ? { ...f, emoji: e } : f)); setEditEmojiOpen(false); }}
+                      style={{ fontSize:22, padding:"8px 0", borderRadius:12, border:`2px solid ${habitEdit.emoji===e ? "var(--accent)" : "transparent"}`, background: habitEdit.emoji===e ? "rgba(110,231,183,0.15)" : "var(--surface-3)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s ease" }}>
                       {e}
                     </button>
                   ))}
@@ -384,7 +414,7 @@ export default function HabitsPage() {
               <div style={{ display:"flex", gap:6 }}>
                 {DAYS.map((day,i) => (
                   <button key={day} onClick={()=>toggleEditDay(day)}
-                    style={{ flex:1, padding:"10px 0", borderRadius:12, border:`1px solid ${editForm.frequency.includes(day)?"var(--accent)":"var(--border)"}`, background:editForm.frequency.includes(day)?"var(--accent)":"var(--surface-3)", color:editForm.frequency.includes(day)?"#000":"var(--text-secondary)", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                    style={{ flex:1, padding:"10px 0", borderRadius:12, border:`1px solid ${habitEdit.frequency.includes(day)?"var(--accent)":"var(--border)"}`, background:habitEdit.frequency.includes(day)?"var(--accent)":"var(--surface-3)", color:habitEdit.frequency.includes(day)?"#000":"var(--text-secondary)", fontWeight:700, fontSize:12, cursor:"pointer" }}>
                     {DAY_LABELS[i]}
                   </button>
                 ))}
@@ -396,8 +426,8 @@ export default function HabitsPage() {
               <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:10 }}>Color</label>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {COLORS.map(c => (
-                  <button key={c} onClick={()=>setEditForm(f=>({...f,color:c}))}
-                    style={{ width:32, height:32, borderRadius:"50%", background:c, border:`3px solid ${editForm.color===c?"white":"transparent"}`, cursor:"pointer", transition:"border 0.15s ease" }} />
+                  <button key={c} onClick={()=>setHabitEdit(f=>(f?{...f,color:c}:f))}
+                    style={{ width:32, height:32, borderRadius:"50%", background:c, border:`3px solid ${habitEdit.color===c?"white":"transparent"}`, cursor:"pointer", transition:"border 0.15s ease" }} />
                 ))}
               </div>
             </div>
@@ -407,7 +437,7 @@ export default function HabitsPage() {
               Save Changes
             </button>
 
-            <button className="tap-scale" onClick={()=>{deleteHabit(editOpen.id); setEditOpen(null);}}
+            <button className="tap-scale" onClick={()=>{deleteHabit(habitEdit.id); setHabitEdit(null);}}
               style={{ padding:14, borderRadius:14, background:"#EF444412", border:"1px solid #EF444425", color:"#EF4444", fontSize:14, fontWeight:600, cursor:"pointer", width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
               <Trash2 size={15} /> Delete Habit
             </button>
