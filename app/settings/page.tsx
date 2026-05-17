@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, useEffect } from "react";
-import { db, initializeSettings } from "@/lib/db";
+import { db, initializeSettings, type JournalSecuritySnapshot } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { hashJournalPassword, verifyJournalPassword } from "@/lib/journalAuth";
@@ -228,6 +228,10 @@ export default function SettingsPage() {
       db.metricsLogs.clear(),
       db.settings.clear(),
       db.focusDaily.clear(),
+      db.journalSecuritySnapshots.clear(),
+      db.foodItems.clear(),
+      db.mealTemplates.clear(),
+      db.mealLogs.clear(),
     ]);
     await initializeSettings();
     setClearSheetOpen(false);
@@ -339,6 +343,7 @@ export default function SettingsPage() {
         {journalNote && (
           <p style={{ margin:"12px 0 0", fontSize:13, fontWeight:600, color: journalNote.type === "ok" ? "var(--accent)" : "#F87171" }}>{journalNote.text}</p>
         )}
+        {settings.journalPassword ? <JournalUnlockSnapshots /> : null}
       </Section>
 
       <Section title="Home quick log" icon={<LayoutGrid size={15}/>}>
@@ -460,6 +465,86 @@ export default function SettingsPage() {
         <p style={{ color:"var(--text-tertiary)", fontSize:12 }}>Lock In — Local only. Your data stays on your device.</p>
         <p style={{ color:"var(--text-tertiary)", fontSize:11, marginTop:4 }}>v1.0.0</p>
       </div>
+    </div>
+  );
+}
+
+function JournalUnlockSnapshots() {
+  const snapshots = useLiveQuery(
+    () => db.journalSecuritySnapshots.orderBy("createdAt").reverse().toArray(),
+    [],
+  );
+
+  async function clearSnapshots() {
+    vibrate(30);
+    await db.journalSecuritySnapshots.clear();
+  }
+
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+      <p style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5, margin: "0 0 12px" }}>
+        Failed journal unlock attempts capture a front-camera photo on this device (up to 30). Grant camera permission when prompted.
+      </p>
+      {!snapshots?.length ? (
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No failed unlock photos yet.</p>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {snapshots.map((snap) => (
+              <SnapshotThumb key={snap.id} snap={snap} />
+            ))}
+          </div>
+          <button
+            type="button"
+            className="tap-scale"
+            onClick={() => void clearSnapshots()}
+            style={{
+              width: "100%",
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 12,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              color: "var(--text-secondary)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Clear all photos
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SnapshotThumb({ snap }: { snap: JournalSecuritySnapshot }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(snap.imageBlob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [snap.id, snap.imageBlob]);
+
+  const when = new Date(snap.createdAt).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return (
+    <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface-3)" }}>
+      {url ? (
+        <img src={url} alt="" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", display: "block" }} />
+      ) : (
+        <div style={{ width: "100%", aspectRatio: "3/4", background: "var(--surface-2)" }} />
+      )}
+      <p style={{ margin: 0, padding: "6px 8px", fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, textAlign: "center" }}>
+        {when}
+      </p>
     </div>
   );
 }

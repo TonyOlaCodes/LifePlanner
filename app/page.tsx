@@ -7,6 +7,7 @@ import { getRotatingQuote, CATEGORY_CONFIG, vibrate, formatDate } from "@/lib/ut
 import ProgressRing from "@/components/ui/ProgressRing";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { MiniTrendChart, type MiniTrendPoint } from "@/components/dashboard/MiniTrendChart";
+import FoodInventorySection from "@/components/dashboard/FoodInventorySection";
 import { Plus, Moon, CheckCircle2, Circle, Scale, Flame, Dumbbell } from "lucide-react";
 import { format, subDays } from "date-fns";
 
@@ -562,6 +563,8 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+
+      <FoodInventorySection />
 
       {/* Bottom Sheets */}
       <BottomSheet open={quickSheet === "sleep"} onClose={() => setQuickSheet(null)} title="Sleep">

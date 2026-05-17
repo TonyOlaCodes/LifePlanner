@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { db, getTodayString } from "@/lib/db";
 import { verifyJournalPassword, upgradeLegacyJournalPasswordIfNeeded } from "@/lib/journalAuth";
 import { matchesJournalSilentUnlock } from "@/lib/journalUnlock";
+import { recordJournalUnlockFailure } from "@/lib/journalSecurity";
 import { vibrate, formatDate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { Plus, Trash2, Pencil } from "lucide-react";
@@ -122,6 +123,7 @@ export default function JournalPage() {
             setPassInput("");
           } else {
             setPassError(true); setPassInput(""); vibrate([30,50,30]);
+            void recordJournalUnlockFailure();
           }
         }} style={{ padding:16, borderRadius:16, background:"var(--accent)", border:"none", color:"#000", fontSize:15, fontWeight:700, cursor:"pointer", width:"100%", marginTop:16 }}>Unlock</button>
       </div>

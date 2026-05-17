@@ -122,6 +122,52 @@ export interface FocusDayLog {
   seconds: number;
 }
 
+export interface JournalSecuritySnapshot {
+  id: string;
+  createdAt: number;
+  reason: "journal_unlock_fail";
+  imageBlob: Blob;
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  emoji?: string;
+  quantity: number;
+  unit: string;
+  /** Full-stock level for progress bar */
+  parLevel?: number;
+  lowStockThreshold?: number;
+  outOfStockAlert?: boolean;
+  quickAddAmount?: number;
+  quickConsumeAmount?: number;
+  pinnedToShoppingList?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MealIngredient {
+  foodItemId: string;
+  amount: number;
+  unit: string;
+}
+
+export interface MealTemplate {
+  id: string;
+  name: string;
+  emoji?: string;
+  ingredients: MealIngredient[];
+  createdAt: number;
+}
+
+export interface MealLog {
+  id: string;
+  date: string;
+  name: string;
+  ingredients: MealIngredient[];
+  createdAt: number;
+}
+
 export interface AppSettings {
   id: 1;
   accentColor: string;
@@ -168,6 +214,10 @@ export class LockInDatabase extends Dexie {
   metricsLogs!: Table<MetricLog, string>;
   settings!: Table<AppSettings, number>;
   focusDaily!: Table<FocusDayLog, string>;
+  journalSecuritySnapshots!: Table<JournalSecuritySnapshot, string>;
+  foodItems!: Table<FoodItem, string>;
+  mealTemplates!: Table<MealTemplate, string>;
+  mealLogs!: Table<MealLog, string>;
 
   constructor() {
     super("LockInDB");
@@ -190,6 +240,14 @@ export class LockInDatabase extends Dexie {
     });
     this.version(3).stores({
       focusDaily: "date",
+    });
+    this.version(4).stores({
+      journalSecuritySnapshots: "id, createdAt",
+    });
+    this.version(5).stores({
+      foodItems: "id, name, updatedAt",
+      mealTemplates: "id, name, createdAt",
+      mealLogs: "id, date, createdAt",
     });
   }
 }
