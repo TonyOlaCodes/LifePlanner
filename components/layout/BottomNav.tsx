@@ -40,6 +40,7 @@ export default function BottomNav() {
             <Link
               key={href}
               href={href}
+              className="tap-scale no-select"
               style={{
                 display: "flex",
                 flexDirection: "column",

@@ -30,6 +30,13 @@ html {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+html.standalone body {
+  /* Home-screen PWA: avoid rubber-band chrome */
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -40,6 +47,131 @@ body {
   padding-top: var(--safe-top);
   padding-bottom: calc(80px + var(--safe-bottom));
   overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-transition {
+  min-height: calc(100dvh - 80px - var(--safe-top) - var(--safe-bottom));
+}
+
+/* PWA chrome */
+.offline-pill {
+  position: fixed;
+  top: calc(8px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(239, 68, 68, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  max-width: calc(100% - 24px);
+  white-space: nowrap;
+}
+
+.sync-status {
+  position: fixed;
+  top: calc(8px + var(--safe-top));
+  right: 12px;
+  z-index: 199;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.install-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(88px + var(--safe-bottom));
+  width: calc(100% - 24px);
+  max-width: 406px;
+  z-index: 60;
+  padding: 16px 18px 18px;
+  border-radius: 18px;
+}
+
+.install-dismiss {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  padding: 4px;
+  cursor: pointer;
+}
+
+.install-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.install-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.45;
+  padding-right: 24px;
+}
+
+.install-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.offline-fallback {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 40%,
+    var(--surface-2) 80%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+.page-skeleton {
+  padding: 20px 16px;
 }
 
 /* Scrollbar hide */

@@ -34,10 +34,16 @@ export function getScoreColor(score: number): string {
   return "#EF4444";
 }
 
-export function vibrate(pattern: number | number[] = 50) {
+export function vibrate(pattern: number | number[] = 50, enabled = true) {
+  if (!enabled) return;
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     navigator.vibrate(pattern);
   }
+}
+
+/** Light tap feedback when haptics enabled in settings */
+export function hapticTap(settingsHaptics?: boolean) {
+  vibrate(12, settingsHaptics !== false);
 }
 
 export { getRotatingQuote, MOTIVATIONAL_QUOTES } from "./motivationalQuotes";

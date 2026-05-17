@@ -1,26 +1,54 @@
 {
   "name": "Lock In",
   "short_name": "Lock In",
-  "description": "Your premium life operating system",
-  "start_url": "/",
+  "description": "Your premium offline life operating system",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#000000",
   "theme_color": "#000000",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/192",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/512",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "categories": ["productivity", "lifestyle"],
-  "screenshots": []
+  "categories": ["productivity", "lifestyle", "health"],
+  "shortcuts": [
+    {
+      "name": "Habits",
+      "short_name": "Habits",
+      "url": "/habits?source=shortcut",
+      "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
+    },
+    {
+      "name": "Focus",
+      "short_name": "Focus",
+      "url": "/focus?source=shortcut",
+      "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
+    },
+    {
+      "name": "Journal",
+      "short_name": "Journal",
+      "url": "/journal?source=shortcut",
+      "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
+    }
+  ]
 }
