@@ -1,43 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { db, type FoodItem } from "@/lib/db";
 import {
   applyRestockBatch,
+  getDefaultPurchaseAmount,
   getParLevel,
   getStockStatus,
-  getSuggestedRestock,
   isShoppingCandidate,
+  previewQuantityAfterPurchase,
 } from "@/lib/foodInventory";
 import { formatFoodQuantity } from "@/lib/foodUnits";
 import { vibrate } from "@/lib/utils";
-import { Check, ShoppingCart } from "lucide-react";
+import { Check, ShoppingCart, X } from "lucide-react";
 
 type RestockLine = { foodItemId: string; amount: string; enabled: boolean };
 
-const primaryBtn: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  background: "var(--accent)",
-  border: "none",
-  color: "#000",
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: "pointer",
-  width: "100%",
-};
-
-const secondaryBtn: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  background: "var(--surface-3)",
-  border: "1px solid var(--border)",
-  color: "var(--text-primary)",
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: "pointer",
-  width: "100%",
-};
+function defaultLine(item: FoodItem): RestockLine {
+  return {
+    foodItemId: item.id,
+    amount: String(getDefaultPurchaseAmount(item)),
+    enabled: true,
+  };
+}
 
 export default function ShoppingTab({ items }: { items: FoodItem[] }) {
   const list = items.filter(isShoppingCandidate);
@@ -46,17 +31,22 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
   const [extraFoodId, setExtraFoodId] = useState("");
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
+  const extrasAvailable = useMemo(
+    () => items.filter((i) => !restockLines.some((l) => l.foodItemId === i.id)),
+    [items, restockLines],
+  );
+
+  const enabledCount = restockLines.filter((l) => {
+    if (!l.enabled) return false;
+    const n = parseFloat(l.amount);
+    return Number.isFinite(n) && n > 0;
+  }).length;
+
   function startTrip() {
     vibrate(30);
     setMsg(null);
     setTripMode(true);
-    setRestockLines(
-      list.map((item) => ({
-        foodItemId: item.id,
-        amount: String(getSuggestedRestock(item) || getParLevel(item)),
-        enabled: true,
-      })),
-    );
+    setRestockLines(list.map(defaultLine));
     setExtraFoodId("");
   }
 
@@ -76,10 +66,7 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
     const item = items.find((i) => i.id === extraFoodId);
     if (!item) return;
     vibrate(20);
-    setRestockLines((lines) => [
-      ...lines,
-      { foodItemId: item.id, amount: String(getSuggestedRestock(item) || 1), enabled: true },
-    ]);
+    setRestockLines((lines) => [...lines, defaultLine(item)]);
     setExtraFoodId("");
   }
 
@@ -96,7 +83,7 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
       .filter(Boolean) as { foodItemId: string; amount: number; unit: string }[];
 
     if (!updates.length) {
-      setMsg({ type: "err", text: "Select at least one item with a quantity" });
+      setMsg({ type: "err", text: "Turn on at least one item and enter how much you bought" });
       return;
     }
 
@@ -107,7 +94,10 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
       return;
     }
     vibrate(50);
-    setMsg({ type: "ok", text: `Added ${updates.length} item${updates.length === 1 ? "" : "s"} to inventory` });
+    setMsg({
+      type: "ok",
+      text: `Added ${updates.length} purchase${updates.length === 1 ? "" : "s"} to inventory`,
+    });
     setTripMode(false);
     setRestockLines([]);
   }
@@ -122,123 +112,102 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
 
   function copyList() {
     const text = list
-      .map((i) => {
-        const need =
-          i.lowStockThreshold != null && i.quantity < i.lowStockThreshold
-            ? ` (have ${formatFoodQuantity(i.quantity, i.unit)}, want ~${formatFoodQuantity(getParLevel(i), i.unit)})`
-            : "";
-        return `• ${i.name}${need}`;
-      })
+      .map((i) => `• ${i.emoji || ""} ${i.name} (full: ~${formatFoodQuantity(getParLevel(i), i.unit)})`)
       .join("\n");
     void navigator.clipboard?.writeText(text || "Shopping list empty");
     vibrate(30);
   }
 
-  const extrasAvailable = items.filter((i) => !restockLines.some((l) => l.foodItemId === i.id));
-
   if (tripMode) {
     return (
-      <div>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 12px" }}>
-          Enter what you bought. Confirm to add everything to inventory at once.
+      <div className="shopping-trip">
+        <p className="shopping-hint">
+          Enter how much you <strong style={{ color: "var(--text-primary)", fontWeight: 700 }}>bought</strong>. That
+          full amount is added on top of what you already have.
         </p>
-        {msg && (
-          <p
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: msg.type === "ok" ? "var(--accent)" : "#F87171",
-              marginBottom: 12,
-            }}
-          >
-            {msg.text}
-          </p>
-        )}
-        {restockLines.length === 0 && (
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
-            No items on your list yet — add what you bought below.
-          </p>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto", marginBottom: 12 }}>
+        {msg && <p className={msg.type === "ok" ? "shopping-msg-ok" : "shopping-msg-err"}>{msg.text}</p>}
+        <div className="shopping-list-scroll">
+          {restockLines.length === 0 && (
+            <p className="shopping-hint" style={{ marginBottom: 0 }}>
+              Pick items below, then enter quantities.
+            </p>
+          )}
           {restockLines.map((line) => {
             const item = items.find((i) => i.id === line.foodItemId);
             if (!item) return null;
+            const bought = parseFloat(line.amount);
+            const after =
+              Number.isFinite(bought) && bought > 0
+                ? previewQuantityAfterPurchase(item, bought, item.unit)
+                : null;
+
             return (
-              <div
+              <label
                 key={line.foodItemId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: 10,
-                  borderRadius: 12,
-                  background: line.enabled ? "var(--surface-2)" : "var(--surface-3)",
-                  border: "1px solid var(--border)",
-                  opacity: line.enabled ? 1 : 0.55,
-                }}
+                className={`shopping-row tap-scale ${line.enabled ? "" : "shopping-row-off"}`}
               >
                 <input
                   type="checkbox"
+                  className="shopping-check"
                   checked={line.enabled}
                   onChange={(e) => updateLine(line.foodItemId, { enabled: e.target.checked })}
-                  style={{ accentColor: "var(--accent)", width: 18, height: 18, flexShrink: 0 }}
                 />
-                <span style={{ fontSize: 20 }}>{item.emoji || "🛒"}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{item.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                <span className="shopping-emoji">{item.emoji || "🛒"}</span>
+                <div className="shopping-row-body">
+                  <span className="shopping-name">{item.name}</span>
+                  <span className="shopping-meta">
                     Have {formatFoodQuantity(item.quantity, item.unit)}
-                  </div>
+                    {after != null && line.enabled && (
+                      <> · after → {formatFoodQuantity(after, item.unit)}</>
+                    )}
+                  </span>
                 </div>
-                <input
-                  className="lock-input"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={line.amount}
-                  onChange={(e) => updateLine(line.foodItemId, { amount: e.target.value })}
-                  style={{ width: 72, padding: "8px 10px", fontSize: 13 }}
-                />
-                <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600, flexShrink: 0 }}>
-                  {item.unit}
-                </span>
-              </div>
+                <div className="shopping-qty-wrap">
+                  <input
+                    className="lock-input shopping-qty-input"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    placeholder="0"
+                    value={line.amount}
+                    onChange={(e) => updateLine(line.foodItemId, { amount: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="shopping-unit">{item.unit}</span>
+                </div>
+              </label>
             );
           })}
         </div>
         {items.length > 0 && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <select className="lock-input" value={extraFoodId} onChange={(e) => setExtraFoodId(e.target.value)} style={{ flex: 1 }}>
-              <option value="">Add another item…</option>
+          <div className="shopping-add-extra">
+            <select
+              className="lock-input"
+              value={extraFoodId}
+              onChange={(e) => setExtraFoodId(e.target.value)}
+              style={{ flex: 1, minHeight: 48 }}
+            >
+              <option value="">+ Add another item…</option>
               {extrasAvailable.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.emoji} {f.name}
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              className="tap-scale"
-              onClick={addExtraItem}
-              disabled={!extraFoodId}
-              style={{ ...primaryBtn, width: "auto", padding: "0 16px", opacity: extraFoodId ? 1 : 0.5 }}
-            >
+            <button type="button" className="tap-scale shopping-add-btn" onClick={addExtraItem} disabled={!extraFoodId}>
               Add
             </button>
           </div>
         )}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" className="tap-scale" onClick={cancelTrip} style={{ ...secondaryBtn, flex: 1 }}>
+        <div className="shopping-trip-footer">
+          <button type="button" className="tap-scale shopping-btn-secondary" onClick={cancelTrip}>
+            <X size={18} />
             Cancel
           </button>
-          <button
-            type="button"
-            className="tap-scale"
-            onClick={() => void confirmTrip()}
-            style={{ ...primaryBtn, flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            <Check size={16} />
-            Confirm restock
+          <button type="button" className="tap-scale shopping-btn-primary" onClick={() => void confirmTrip()}>
+            <Check size={18} />
+            Add{enabledCount > 0 ? ` ${enabledCount}` : ""} to inventory
           </button>
         </div>
       </div>
@@ -246,77 +215,41 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
   }
 
   return (
-    <div>
-      <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 14px" }}>
-        Items appear here when stock is low, out, or pinned. Restock suggestions use your par level.
+    <div className="shopping-home">
+      <p className="shopping-hint">
+        Low or out items show here. Go shopping to log what you bought — full amounts add to stock.
       </p>
-      <button
-        type="button"
-        className="tap-scale"
-        onClick={startTrip}
-        style={{ ...primaryBtn, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-      >
-        <ShoppingCart size={16} />
+      <button type="button" className="tap-scale shopping-btn-primary shopping-go-btn" onClick={startTrip}>
+        <ShoppingCart size={18} />
         Go shopping
       </button>
-      {msg && (
-        <p style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)", marginBottom: 12 }}>{msg.text}</p>
-      )}
+      {msg && <p className="shopping-msg-ok">{msg.text}</p>}
       {list.length === 0 ? (
-        <p
-          style={{
-            fontSize: 14,
-            color: "var(--text-secondary)",
-            padding: 16,
-            borderRadius: 14,
-            background: "var(--surface-2)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          All stocked up — nothing on the list. Tap Go shopping to restock anything you bought.
-        </p>
+        <p className="shopping-empty">All stocked up. You can still go shopping to add purchases.</p>
       ) : (
         <>
-          <button type="button" className="tap-scale" onClick={copyList} style={{ ...secondaryBtn, marginBottom: 12 }}>
-            Copy shopping list
+          <button type="button" className="tap-scale shopping-btn-secondary" onClick={copyList}>
+            Copy list
           </button>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 320, overflowY: "auto" }}>
+          <div className="shopping-list-scroll shopping-list-home">
             {list.map((item) => {
               const status = getStockStatus(item);
               return (
                 <div
                   key={item.id}
+                  className="shopping-home-row"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: 12,
-                    borderRadius: 14,
-                    background: "var(--surface-2)",
-                    border: `1px solid ${status === "out" ? "#EF444440" : "#F59E0B40"}`,
+                    borderColor: status === "out" ? "#EF444440" : status === "low" ? "#F59E0B40" : "var(--border)",
                   }}
                 >
-                  <span style={{ fontSize: 22 }}>{item.emoji || "🛒"}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      Have {formatFoodQuantity(item.quantity, item.unit)} · target ~{formatFoodQuantity(getParLevel(item), item.unit)}
-                    </div>
+                  <span className="shopping-emoji">{item.emoji || "🛒"}</span>
+                  <div className="shopping-row-body">
+                    <span className="shopping-name">{item.name}</span>
+                    <span className="shopping-meta">
+                      {formatFoodQuantity(item.quantity, item.unit)} now · full pack ~{formatFoodQuantity(getParLevel(item), item.unit)}
+                    </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void togglePin(item)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      border: "1px solid var(--border)",
-                      background: item.pinnedToShoppingList ? "var(--accent)20" : "var(--surface-3)",
-                      color: item.pinnedToShoppingList ? "var(--accent)" : "var(--text-tertiary)",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
+                  <button type="button" className="tap-scale shopping-pin" onClick={() => void togglePin(item)}>
                     {item.pinnedToShoppingList ? "Pinned" : "Pin"}
                   </button>
                 </div>

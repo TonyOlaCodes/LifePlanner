@@ -39,6 +39,25 @@ export function getSuggestedRestock(item: FoodItem): number {
   return rounded;
 }
 
+/** Default “I bought this much” — full par / package size, not just top-up to par. */
+export function getDefaultPurchaseAmount(item: FoodItem): number {
+  const par = getParLevel(item);
+  if (item.quickAddAmount != null && item.quickAddAmount > 0) {
+    return item.quickAddAmount >= par ? item.quickAddAmount : par;
+  }
+  return par >= 1 ? (par >= 10 ? Math.round(par) : Math.round(par * 100) / 100) : 1;
+}
+
+export function previewQuantityAfterPurchase(
+  item: FoodItem,
+  purchaseAmount: number,
+  purchaseUnit: string,
+): number | null {
+  const added = convertAmount(purchaseAmount, purchaseUnit, item.unit);
+  if (added == null) return null;
+  return item.quantity + added;
+}
+
 export async function applyRestockBatch(
   updates: { foodItemId: string; amount: number; unit: string }[],
 ): Promise<{ ok: true } | { ok: false; errors: string[] }> {

@@ -252,3 +252,228 @@ textarea.lock-input {
 .task-due-overdue {
   animation: task-due-pulse 1.5s ease-in-out infinite;
 }
+
+/* Food shopping trip — mobile-first */
+.shopping-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.shopping-msg-ok {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 12px;
+}
+
+.shopping-msg-err {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f87171;
+  margin: 0 0 12px;
+}
+
+.shopping-empty {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin: 0;
+}
+
+.shopping-btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.shopping-go-btn {
+  margin-bottom: 12px;
+}
+
+.shopping-btn-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.shopping-list-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(52dvh, 420px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+}
+
+.shopping-list-home {
+  max-height: min(40dvh, 320px);
+}
+
+.shopping-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.shopping-row-off {
+  opacity: 0.5;
+}
+
+.shopping-check {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.shopping-emoji {
+  font-size: 24px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.shopping-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.shopping-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.shopping-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.shopping-qty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.shopping-qty-input {
+  width: 76px !important;
+  min-height: 44px !important;
+  padding: 10px 10px !important;
+  font-size: 16px !important;
+  text-align: right;
+}
+
+.shopping-unit {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.shopping-add-extra {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.shopping-add-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.shopping-add-btn:disabled {
+  opacity: 0.45;
+}
+
+.shopping-trip-footer {
+  display: flex;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
+  padding-bottom: var(--safe-bottom);
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+.shopping-trip-footer .shopping-btn-secondary {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.shopping-trip-footer .shopping-btn-primary {
+  flex: 2;
+}
+
+.shopping-home-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.shopping-pin {
+  padding: 8px 12px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
