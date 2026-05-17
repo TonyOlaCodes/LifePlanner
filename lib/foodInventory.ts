@@ -30,6 +30,46 @@ export function isShoppingCandidate(item: FoodItem): boolean {
   return status === "low" || status === "out";
 }
 
+/** How much to buy to reach par level (in the item's stored unit). */
+export function getSuggestedRestock(item: FoodItem): number {
+  const par = getParLevel(item);
+  const need = par - item.quantity;
+  if (need <= 0) return 0;
+  const rounded = need >= 10 ? Math.round(need) : Math.round(need * 100) / 100;
+  return rounded;
+}
+
+export async function applyRestockBatch(
+  updates: { foodItemId: string; amount: number; unit: string }[],
+): Promise<{ ok: true } | { ok: false; errors: string[] }> {
+  const errors: string[] = [];
+  const now = Date.now();
+
+  await db.transaction("rw", db.foodItems, async () => {
+    for (const u of updates) {
+      if (u.amount <= 0) continue;
+      const item = await db.foodItems.get(u.foodItemId);
+      if (!item) {
+        errors.push("Item not found");
+        continue;
+      }
+      const next = addToItem(item, u.amount, u.unit);
+      if (next == null) {
+        errors.push(`${item.name}: cannot add ${formatFoodQuantity(u.amount, u.unit)}`);
+        continue;
+      }
+      await db.foodItems.update(item.id, {
+        quantity: next,
+        updatedAt: now,
+        pinnedToShoppingList: false,
+      });
+    }
+  });
+
+  if (errors.length) return { ok: false, errors };
+  return { ok: true };
+}
+
 export function subtractFromItem(item: FoodItem, amount: number, unit: string): number | null {
   const converted = convertAmount(amount, unit, item.unit);
   if (converted == null) return null;

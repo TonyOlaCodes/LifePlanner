@@ -168,48 +168,6 @@ export interface MealLog {
   createdAt: number;
 }
 
-export interface Routine {
-  id: string;
-  name: string;
-  emoji?: string;
-  steps: { title: string; durationMinutes?: number }[];
-  /** Weekdays: mon,tue,... */
-  schedule: string[];
-  order: number;
-  createdAt: number;
-  archived: 0 | 1;
-}
-
-export interface PlannerItem {
-  id: string;
-  date: string;
-  title: string;
-  notes?: string;
-  time?: string;
-  completed: boolean;
-  category: string;
-  order: number;
-  createdAt: number;
-}
-
-export interface AnalyticsSnapshot {
-  id: string;
-  date: string;
-  type: string;
-  data: Record<string, unknown>;
-  createdAt: number;
-}
-
-export interface StreakRecord {
-  id: string;
-  entityType: "habit" | "focus" | "journal" | "discipline";
-  entityId: string;
-  currentStreak: number;
-  bestStreak: number;
-  lastActiveDate: string;
-  updatedAt: number;
-}
-
 export interface AppSettings {
   id: 1;
   accentColor: string;
@@ -260,10 +218,6 @@ export class LockInDatabase extends Dexie {
   foodItems!: Table<FoodItem, string>;
   mealTemplates!: Table<MealTemplate, string>;
   mealLogs!: Table<MealLog, string>;
-  routines!: Table<Routine, string>;
-  plannerItems!: Table<PlannerItem, string>;
-  analyticsSnapshots!: Table<AnalyticsSnapshot, string>;
-  streakRecords!: Table<StreakRecord, string>;
 
   constructor() {
     super("LockInDB");
@@ -294,12 +248,6 @@ export class LockInDatabase extends Dexie {
       foodItems: "id, name, updatedAt",
       mealTemplates: "id, name, createdAt",
       mealLogs: "id, date, createdAt",
-    });
-    this.version(6).stores({
-      routines: "id, order, createdAt, archived",
-      plannerItems: "id, date, completed, category, order, createdAt",
-      analyticsSnapshots: "id, date, type, createdAt",
-      streakRecords: "id, entityType, entityId, lastActiveDate, updatedAt",
     });
   }
 }

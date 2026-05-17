@@ -24,11 +24,31 @@ import {
 } from "@/lib/foodUnits";
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
-import { Minus, Plus, ShoppingCart, UtensilsCrossed, Package, AlertTriangle } from "lucide-react";
+import ShoppingTab from "@/components/dashboard/ShoppingTab";
+import {
+  Minus,
+  Plus,
+  ShoppingCart,
+  UtensilsCrossed,
+  Package,
+  AlertTriangle,
+  Pencil,
+  ChevronDown,
+  ChevronUp,
+  Check,
+} from "lucide-react";
 
 type SheetTab = "inventory" | "meals" | "shopping";
 
-const FOOD_EMOJIS = ["🥛", "🍗", "🥚", "🍞", "🥣", "🧀", "🍎", "🥦", "🍚", "🧃", "🥩", "🐟"];
+const FOOD_EMOJIS = [
+  "🥛", "🧀", "🧈", "🫕",
+  "🍗", "🥩", "🐟", "🦐", "🥚", "🍖", "🥓", "🌭", "🍔", "🥪",
+  "🍞", "🥖", "🥐", "🥯", "🧇", "🥞", "🍚", "🍝", "🥣", "🌾", "🌮", "🌯",
+  "🍎", "🍌", "🍊", "🍇", "🍓", "🫐", "🍋", "🥑", "🍅", "🥒", "🥕", "🥦", "🥬", "🧅", "🥔", "🌽", "🍠",
+  "🥫", "🧃", "☕", "🍵", "🫒", "🧂", "🍯", "🥜", "🍫", "🍪", "🧁", "🍩",
+  "🥗", "🍕", "🍜", "🍲", "🥡", "🍱", "🥘", "🍣", "🥟", "🍤",
+  "🧊", "🍦", "🥤", "🍶",
+];
 
 export default function FoodInventorySection() {
   const today = getTodayString();
@@ -250,10 +270,14 @@ function FoodItemRow({
   item,
   compact,
   onOpen,
+  onEdit,
+  editActive,
 }: {
   item: FoodItem;
   compact?: boolean;
   onOpen?: () => void;
+  onEdit?: () => void;
+  editActive?: boolean;
 }) {
   const status = getStockStatus(item);
   const progress = getStockProgress(item);
@@ -295,6 +319,11 @@ function FoodItemRow({
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          {onEdit && (
+            <IconBtn onClick={onEdit} label="Edit item" active={editActive}>
+              <Pencil size={14} />
+            </IconBtn>
+          )}
           <IconBtn onClick={() => void quick("subtract")} label="Consume">
             <Minus size={14} />
           </IconBtn>
@@ -340,10 +369,12 @@ function IconBtn({
   children,
   onClick,
   label,
+  active,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   label: string;
+  active?: boolean;
 }) {
   return (
     <button
@@ -355,9 +386,9 @@ function IconBtn({
         width: 32,
         height: 32,
         borderRadius: 10,
-        border: "1px solid var(--border)",
-        background: "var(--surface-3)",
-        color: "var(--text-primary)",
+        border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+        background: active ? "var(--accent)25" : "var(--surface-3)",
+        color: active ? "var(--accent)" : "var(--text-primary)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -383,24 +414,14 @@ function InventoryTab({ items }: { items: FoodItem[] }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto" }}>
         {items.map((item) => (
           <div key={item.id}>
-            <FoodItemRow item={item} />
-            <button
-              type="button"
-              onClick={() => setEditingId(editingId === item.id ? null : item.id)}
-              style={{
-                marginTop: 6,
-                padding: "6px 10px",
-                borderRadius: 8,
-                border: "none",
-                background: "transparent",
-                color: "var(--accent)",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
+            <FoodItemRow
+              item={item}
+              editActive={editingId === item.id}
+              onEdit={() => {
+                vibrate(20);
+                setEditingId(editingId === item.id ? null : item.id);
               }}
-            >
-              {editingId === item.id ? "Cancel edit" : "Edit quantities & alerts"}
-            </button>
+            />
             {editingId === item.id && (
               <EditFoodForm item={item} onDone={() => setEditingId(null)} onDelete={() => setEditingId(null)} />
             )}
@@ -412,6 +433,7 @@ function InventoryTab({ items }: { items: FoodItem[] }) {
 }
 
 function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
+  const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🥫");
   const [qty, setQty] = useState("");
@@ -450,16 +472,47 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
     setQty("");
     setLow("");
     setPar("");
+    setExpanded(false);
     onSaved?.();
   }
 
   return (
     <div style={{ padding: 14, borderRadius: 16, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-      <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Add food</p>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-        {FOOD_EMOJIS.map((e) => (
+      <button
+        type="button"
+        className="tap-scale"
+        onClick={() => {
+          vibrate(15);
+          setExpanded((x) => !x);
+        }}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          color: "var(--text-primary)",
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Plus size={16} style={{ color: "var(--accent)" }} />
+          Add new food
+        </span>
+        {expanded ? <ChevronUp size={18} color="var(--text-tertiary)" /> : <ChevronDown size={18} color="var(--text-tertiary)" />}
+      </button>
+      {expanded && (
+        <>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12, marginBottom: 10, maxHeight: 120, overflowY: "auto" }}>
+        {FOOD_EMOJIS.map((e, i) => (
           <button
-            key={e}
+            key={`${e}-${i}`}
             type="button"
             onClick={() => setEmoji(e)}
             style={{
@@ -511,6 +564,8 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
       <button type="button" className="tap-scale" onClick={() => void save()} style={primaryBtn}>
         Add to inventory
       </button>
+        </>
+      )}
     </div>
   );
 }
@@ -929,93 +984,6 @@ function MealBuilder({
   );
 }
 
-function ShoppingTab({ items }: { items: FoodItem[] }) {
-  const list = items.filter(isShoppingCandidate);
-
-  async function togglePin(item: FoodItem) {
-    vibrate(20);
-    await db.foodItems.update(item.id, {
-      pinnedToShoppingList: !item.pinnedToShoppingList,
-      updatedAt: Date.now(),
-    });
-  }
-
-  function copyList() {
-    const text = list
-      .map((i) => {
-        const need =
-          i.lowStockThreshold != null && i.quantity < i.lowStockThreshold
-            ? ` (have ${formatFoodQuantity(i.quantity, i.unit)}, want ~${formatFoodQuantity(getParLevel(i), i.unit)})`
-            : "";
-        return `• ${i.name}${need}`;
-      })
-      .join("\n");
-    void navigator.clipboard?.writeText(text || "Shopping list empty");
-    vibrate(30);
-  }
-
-  return (
-    <div>
-      <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 14px" }}>
-        Items appear here when stock is low, out, or pinned. Restock suggestions use your par level.
-      </p>
-      {list.length === 0 ? (
-        <p style={{ fontSize: 14, color: "var(--text-secondary)", padding: 16, borderRadius: 14, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-          All stocked up — nothing on the list.
-        </p>
-      ) : (
-        <>
-          <button type="button" className="tap-scale" onClick={copyList} style={{ ...primaryBtn, marginBottom: 12 }}>
-            Copy shopping list
-          </button>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 380, overflowY: "auto" }}>
-            {list.map((item) => {
-              const status = getStockStatus(item);
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: 12,
-                    borderRadius: 14,
-                    background: "var(--surface-2)",
-                    border: `1px solid ${status === "out" ? "#EF444440" : "#F59E0B40"}`,
-                  }}
-                >
-                  <span style={{ fontSize: 22 }}>{item.emoji || "🛒"}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      Have {formatFoodQuantity(item.quantity, item.unit)} · target ~{formatFoodQuantity(getParLevel(item), item.unit)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void togglePin(item)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      border: "1px solid var(--border)",
-                      background: item.pinnedToShoppingList ? "var(--accent)20" : "var(--surface-3)",
-                      color: item.pinnedToShoppingList ? "var(--accent)" : "var(--text-tertiary)",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {item.pinnedToShoppingList ? "Pinned" : "Pin"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 const labelStyle: React.CSSProperties = {
   fontSize: 12,
