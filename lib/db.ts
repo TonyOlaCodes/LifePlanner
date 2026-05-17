@@ -238,6 +238,22 @@ export interface AppSettings {
   bootstrapPackApplied?: boolean;
   /** First day we attribute insights / “missed” to (YYYY-MM-DD); set on install or inferred once for existing data */
   accountStartDate?: string;
+  /** Per-type local notification toggles */
+  notificationReminders?: {
+    daily: boolean;
+    habits: boolean;
+    study: boolean;
+    sleep: boolean;
+    streaks: boolean;
+    focus: boolean;
+  };
+  /** User saw the explain-before-ask notification sheet */
+  notificationExplained?: boolean;
+  lastDailyReminderDate?: string;
+  lastHabitReminderDate?: string;
+  lastStudyReminderDate?: string;
+  lastSleepReminderDate?: string;
+  lastStreakReminderDate?: string;
 }
 
 export class LockInDatabase extends Dexie {
