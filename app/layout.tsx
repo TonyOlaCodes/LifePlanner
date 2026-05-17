@@ -4,15 +4,30 @@ import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
   title: "Lock In",
-  description: "Your premium life operating system",
+  description: "Your premium offline life operating system",
+  applicationName: "Lock In",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Lock In",
   },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
   icons: {
-    apple: "/icons/icon-192.png",
+    icon: [{ url: "/icons/192", sizes: "192x192", type: "image/png" }],
+    apple: [
+      { url: "/icons/180", sizes: "180x180", type: "image/png" },
+      { url: "/icons/192", sizes: "192x192", type: "image/png" },
+    ],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
 };
 
@@ -21,16 +36,20 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#000000",
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: light)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <head>
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="apple-touch-icon" href="/icons/180" />
+        <link rel="apple-touch-startup-image" href="/icons/512" />
+        <meta name="format-detection" content="telephone=no" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
