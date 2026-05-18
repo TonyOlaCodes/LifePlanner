@@ -9,7 +9,6 @@ const withPwa = withPWA({
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
   runtimeCaching,
-  importScripts: ["/notification-sw.js"],
   fallbacks: {
     document: "/offline",
   },

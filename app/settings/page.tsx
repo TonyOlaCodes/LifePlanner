@@ -6,9 +6,7 @@ import { db, initializeSettings, type JournalSecuritySnapshot } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { hashJournalPassword, verifyJournalPassword } from "@/lib/journalAuth";
-import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid, Bell } from "lucide-react";
-import { DEFAULT_NOTIFICATION_REMINDERS } from "@/lib/notifications/types";
-import { getNotificationPermission } from "@/lib/pwa/platform";
+import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid } from "lucide-react";
 
 const CLEAR_CONFIRM_PHRASE = "CLEAR ALL DATA";
 
@@ -26,6 +24,16 @@ const ACCENT_PRESETS = [
 ];
 
 const FORGOT_JOURNAL_PHRASE = "RESET MY JOURNAL LOCK";
+const CLEAR_GROUPS = [
+  { key: "habits", label: "Habits + habit logs" },
+  { key: "tasks", label: "Tasks" },
+  { key: "journal", label: "Journal" },
+  { key: "focus", label: "Deep work" },
+  { key: "health", label: "Sleep, weight, calories" },
+  { key: "workouts", label: "Workouts + records" },
+  { key: "food", label: "Food inventory + meals" },
+  { key: "settings", label: "Settings" },
+] as const;
 
 export default function SettingsPage() {
   const settings = useLiveQuery(()=>db.settings.get(1),[]);
@@ -34,6 +42,16 @@ export default function SettingsPage() {
   const [exportMsg, setExportMsg] = useState("");
   const [clearSheetOpen, setClearSheetOpen] = useState(false);
   const [clearPhraseInput, setClearPhraseInput] = useState("");
+  const [clearGroups, setClearGroups] = useState<Record<(typeof CLEAR_GROUPS)[number]["key"], boolean>>({
+    habits: true,
+    tasks: true,
+    journal: true,
+    focus: true,
+    health: true,
+    workouts: true,
+    food: true,
+    settings: true,
+  });
   const [journalCurrent, setJournalCurrent] = useState("");
   const [journalNew, setJournalNew] = useState("");
   const [journalConfirm, setJournalConfirm] = useState("");
@@ -215,30 +233,21 @@ export default function SettingsPage() {
   async function clearAllDataConfirmed() {
     if (clearPhraseInput !== CLEAR_CONFIRM_PHRASE) return;
     vibrate([35, 35, 35]);
-    await Promise.all([
-      db.habits.clear(),
-      db.habitLogs.clear(),
-      db.sleepLogs.clear(),
-      db.workoutLogs.clear(),
-      db.personalRecords.clear(),
-      db.studySessions.clear(),
-      db.exams.clear(),
-      db.tasks.clear(),
-      db.journalEntries.clear(),
-      db.disciplineLogs.clear(),
-      db.contentPosts.clear(),
-      db.metricsLogs.clear(),
-      db.settings.clear(),
-      db.focusDaily.clear(),
-      db.journalSecuritySnapshots.clear(),
-      db.foodItems.clear(),
-      db.mealTemplates.clear(),
-      db.mealLogs.clear(),
-    ]);
-    await initializeSettings();
+    const clears: Promise<unknown>[] = [];
+    if (clearGroups.habits) clears.push(db.habits.clear(), db.habitLogs.clear());
+    if (clearGroups.tasks) clears.push(db.tasks.clear(), db.plannerItems.clear());
+    if (clearGroups.journal) clears.push(db.journalEntries.clear(), db.journalSecuritySnapshots.clear());
+    if (clearGroups.focus) clears.push(db.focusDaily.clear());
+    if (clearGroups.health) clears.push(db.sleepLogs.clear(), db.metricsLogs.clear());
+    if (clearGroups.workouts) clears.push(db.workoutLogs.clear(), db.personalRecords.clear(), db.studySessions.clear(), db.exams.clear());
+    if (clearGroups.food) clears.push(db.foodItems.clear(), db.mealTemplates.clear(), db.mealLogs.clear());
+    if (clearGroups.settings) clears.push(db.settings.clear());
+    clears.push(db.disciplineLogs.clear(), db.contentPosts.clear());
+    await Promise.all(clears);
+    if (clearGroups.settings) await initializeSettings();
     setClearSheetOpen(false);
     setClearPhraseInput("");
-    setExportMsg("Everything was reset. Settings restored to defaults.");
+    setExportMsg(clearGroups.settings ? "Selected data was reset. Settings restored to defaults." : "Selected data was reset.");
     setTimeout(() => setExportMsg(""), 5000);
   }
 
@@ -256,76 +265,6 @@ export default function SettingsPage() {
           <input type="text" className="lock-input" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} style={{ flex:1 }} />
           <button className="tap-scale" onClick={saveName} style={{ padding:"14px 18px", borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:"pointer" }}>Save</button>
         </div>
-      </Section>
-
-      <Section title="Reminders" icon={<Bell size={15} />}>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 12px" }}>
-          Local reminders on this iPhone. Install from Home Screen first, then enable. We never ask on first launch.
-        </p>
-        <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, fontSize: 14, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={settings.notificationsEnabled}
-            onChange={(e) => void update({ notificationsEnabled: e.target.checked })}
-            style={{ width: 18, height: 18, accentColor: "var(--accent)" }}
-          />
-          Reminders enabled
-        </label>
-        <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Daily check-in time</label>
-        <input
-          type="time"
-          className="lock-input"
-          value={settings.reminderTime}
-          onChange={(e) => void update({ reminderTime: e.target.value })}
-          style={{ marginBottom: 12, maxWidth: 160 }}
-        />
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-          {(
-            [
-              ["daily", "Daily check-in"],
-              ["habits", "Habits"],
-              ["study", "Study"],
-              ["sleep", "Sleep"],
-              ["streaks", "Streaks"],
-              ["focus", "Focus complete"],
-            ] as const
-          ).map(([key, label]) => {
-            const prefs = { ...DEFAULT_NOTIFICATION_REMINDERS, ...settings.notificationReminders };
-            return (
-              <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
-                <input
-                  type="checkbox"
-                  checked={prefs[key]}
-                  onChange={(e) =>
-                    void update({
-                      notificationReminders: { ...prefs, [key]: e.target.checked },
-                    })
-                  }
-                  style={{ accentColor: "var(--accent)" }}
-                />
-                {label}
-              </label>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          className="tap-scale"
-          onClick={() => window.dispatchEvent(new CustomEvent("lockin:open-notifications"))}
-          style={{
-            width: "100%",
-            padding: 14,
-            borderRadius: 14,
-            background: "var(--surface-2)",
-            border: "1px solid var(--border)",
-            color: "var(--text-primary)",
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: "pointer",
-          }}
-        >
-          {getNotificationPermission() === "granted" ? "Notification settings" : "Set up notifications"}
-        </button>
       </Section>
 
       {/* Accent Color */}
@@ -499,8 +438,21 @@ export default function SettingsPage() {
 
       <BottomSheet open={clearSheetOpen} onClose={() => { setClearSheetOpen(false); setClearPhraseInput(""); }} title="Erase everything?">
         <p style={{ fontSize:14, color:"var(--text-secondary)", lineHeight:1.5, margin:"0 0 12px" }}>
-          This deletes habits, logs, tasks, journal, workouts, metrics, and settings on this device. Type the phrase below exactly (all caps) to confirm.
+          Choose what to delete, then type the phrase below exactly (all caps) to confirm.
         </p>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+          {CLEAR_GROUPS.map((group) => (
+            <label key={group.key} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 8px", borderRadius:12, background:"var(--surface-2)", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              <input
+                type="checkbox"
+                checked={clearGroups[group.key]}
+                onChange={(e) => setClearGroups((g) => ({ ...g, [group.key]: e.target.checked }))}
+                style={{ width:16, height:16, accentColor:"#EF4444", flexShrink:0 }}
+              />
+              {group.label}
+            </label>
+          ))}
+        </div>
         <p style={{ fontSize:12, fontWeight:700, color:"#F87171", margin:"0 0 8px", letterSpacing:0.3 }}>{CLEAR_CONFIRM_PHRASE}</p>
         <input
           type="text"
@@ -632,4 +584,3 @@ function Section({ title, icon, children }: { title:string; icon:React.ReactNode
     </div>
   );
 }
-

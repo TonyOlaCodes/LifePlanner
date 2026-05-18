@@ -64,6 +64,10 @@ export default function FoodInventorySection() {
     [items],
   );
   const shoppingItems = useMemo(() => (items || []).filter(isShoppingCandidate), [items]);
+  const sortedItems = useMemo(
+    () => [...(items || [])].sort((a, b) => stockRatio(a) - stockRatio(b) || a.name.localeCompare(b.name)),
+    [items],
+  );
 
   function openSheet(nextTab: SheetTab = "inventory") {
     vibrate(30);
@@ -150,26 +154,27 @@ export default function FoodInventorySection() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {items.slice(0, 5).map((item) => (
-              <FoodItemRow key={item.id} item={item} compact onOpen={() => openSheet("inventory")} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+            {sortedItems.slice(0, 12).map((item) => (
+              <FoodCompactCard key={item.id} item={item} onOpen={() => openSheet("inventory")} />
             ))}
-            {items.length > 5 && (
+            {items.length > 12 && (
               <button
                 type="button"
                 onClick={() => openSheet("inventory")}
                 style={{
+                  minHeight: 92,
                   padding: 10,
                   borderRadius: 12,
                   border: "1px dashed var(--border)",
                   background: "transparent",
                   color: "var(--text-tertiary)",
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   cursor: "pointer",
                 }}
               >
-                +{items.length - 5} more items
+                +{items.length - 12} more
               </button>
             )}
           </div>
@@ -281,7 +286,7 @@ function FoodItemRow({
 }) {
   const status = getStockStatus(item);
   const progress = getStockProgress(item);
-  const barColor = status === "out" ? "#EF4444" : status === "low" ? "#F59E0B" : "var(--accent)";
+  const barColor = stockColor(item);
 
   async function quick(delta: "add" | "subtract") {
     vibrate(30);
@@ -365,6 +370,60 @@ function FoodItemRow({
   );
 }
 
+function stockRatio(item: FoodItem): number {
+  const par = getParLevel(item);
+  return par > 0 ? item.quantity / par : 0;
+}
+
+function stockColor(item: FoodItem): string {
+  const ratio = stockRatio(item);
+  if (ratio >= 1) return "#22C55E";
+  if (ratio >= 0.65) return "#84CC16";
+  if (ratio >= 0.35) return "#F59E0B";
+  return "#EF4444";
+}
+
+function FoodCompactCard({ item, onOpen }: { item: FoodItem; onOpen: () => void }) {
+  const progress = getStockProgress(item);
+  const color = stockColor(item);
+  const status = getStockStatus(item);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="tap-scale"
+      style={{
+        minHeight: 92,
+        padding: "10px 8px",
+        borderRadius: 12,
+        background: `${color}12`,
+        border: `1px solid ${color}40`,
+        color: "var(--text-primary)",
+        cursor: "pointer",
+        textAlign: "left",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>{item.emoji || "🥫"}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+      </div>
+      <span style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {formatFoodQuantity(item.quantity, item.unit)}
+      </span>
+      <div style={{ marginTop: "auto", height: 6, borderRadius: 100, background: "var(--surface-3)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${progress}%`, background: color, borderRadius: 100 }} />
+      </div>
+      <span style={{ fontSize: 9, color, fontWeight: 900, textTransform: "uppercase" }}>
+        {status === "out" ? "Out" : status === "low" ? "Low" : stockRatio(item) >= 1 ? "Full" : `${Math.round(progress)}%`}
+      </span>
+    </button>
+  );
+}
+
 function IconBtn({
   children,
   onClick,
@@ -412,7 +471,7 @@ function InventoryTab({ items }: { items: FoodItem[] }) {
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto" }}>
-        {items.map((item) => (
+        {[...items].sort((a, b) => stockRatio(a) - stockRatio(b) || a.name.localeCompare(b.name)).map((item) => (
           <div key={item.id}>
             <FoodItemRow
               item={item}

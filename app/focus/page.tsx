@@ -5,9 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getTodayString, addFocusSecondsForDate } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
 import Link from "next/link";
-import { Target, Play, AlertOctagon } from "lucide-react";
-import { LockInOverlay } from "@/components/focus/LockInOverlay";
-import { notifyFocusComplete } from "@/lib/notifications/scheduler";
+import { Target, Play, Square, AlertOctagon, Plus } from "lucide-react";
 import { format, startOfWeek, parseISO, addDays } from "date-fns";
 
 const PRESETS = [15, 30, 45, 60] as const;
@@ -119,12 +117,11 @@ export default function FocusPage() {
     } else if (isActive && timeLeft === 0) {
       void flushPendingSeconds();
       vibrate([50, 100, 50, 100, 50, 100]);
-      const mins = Math.max(1, Math.round(totalSessionSecs / 60));
-      void notifyFocusComplete(mins);
       setIsActive(false);
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
       flushTimerRef.current = null;
       void releaseWakeLock();
+      alert("Focus session complete! Great job.");
     }
 
     return () => {
@@ -152,7 +149,7 @@ export default function FocusPage() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const totalSecs = settings?.totalFocusSeconds ?? ((settings?.totalFocusMinutes ?? 0) * 60);
+  const totalSecs = (focusRows || []).reduce((sum, row) => sum + row.seconds, 0);
   const yrs = Math.floor(totalSecs / (3600 * 24 * 365));
   let rem = totalSecs % (3600 * 24 * 365);
   const mos = Math.floor(rem / (3600 * 24 * 30));
@@ -203,16 +200,127 @@ export default function FocusPage() {
   const pct = (done: number, goal: number) => Math.min(100, goal > 0 ? Math.round((done / goal) * 100) : 0);
 
   if (isActive) {
+    const progress = totalSessionSecs > 0 ? 1 - timeLeft / totalSessionSecs : 0;
+
     return (
-      <LockInOverlay
-        timeLeft={timeLeft}
-        totalSessionSecs={totalSessionSecs}
-        showAbandon={showAbandon}
-        onAddFive={addFiveMinutes}
-        onRequestAbandon={() => setShowAbandon(true)}
-        onConfirmAbandon={stopFocus}
-        onCancelAbandon={() => setShowAbandon(false)}
-      />
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 100,
+          background: "rgba(0,0,0,0.78)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0 16px",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 400,
+            filter: "brightness(0.72)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ position: "relative", width: 280, height: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="4"
+                strokeDasharray="283"
+                strokeDashoffset={283 * (1 - Math.max(0, Math.min(1, progress)))}
+                style={{ transition: "stroke-dashoffset 1s linear" }}
+              />
+            </svg>
+            <div style={{ textAlign: "center" }}>
+              <h1 style={{ fontSize: 64, fontWeight: 800, margin: 0, letterSpacing: -2, fontVariantNumeric: "tabular-nums", color: "var(--text-primary)" }}>
+                {formatTime(timeLeft)}
+              </h1>
+              <p style={{ color: "var(--accent)", fontSize: 16, fontWeight: 700, margin: "8px 0 0", textTransform: "uppercase", letterSpacing: 2 }}>
+                Deep Work
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="tap-scale"
+            onClick={addFiveMinutes}
+            style={{
+              marginTop: 28,
+              padding: "14px 22px",
+              borderRadius: 100,
+              background: "rgba(110,231,183,0.15)",
+              border: "1px solid rgba(110,231,183,0.4)",
+              color: "var(--accent)",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Plus size={18} /> +5 minutes
+          </button>
+
+          <p style={{ marginTop: 28, color: "rgba(255,255,255,0.45)", fontSize: 13, textAlign: "center", maxWidth: 280, lineHeight: 1.6 }}>
+            Do Not Disturb recommended. If you leave this app, your timer will fail.
+          </p>
+
+          {showAbandon ? (
+            <div style={{ marginTop: 36, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="tap-scale"
+                onClick={stopFocus}
+                style={{ padding: "16px 28px", borderRadius: 100, background: "#EF4444", border: "none", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}
+              >
+                Confirm Give Up
+              </button>
+              <button
+                type="button"
+                className="tap-scale"
+                onClick={() => setShowAbandon(false)}
+                style={{ padding: "16px 28px", borderRadius: 100, background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 15, fontWeight: 700, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="tap-scale"
+              onClick={() => setShowAbandon(true)}
+              style={{
+                marginTop: 36,
+                padding: "16px 32px",
+                borderRadius: 100,
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "rgba(255,255,255,0.55)",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Square size={18} /> Give Up
+            </button>
+          )}
+        </div>
+      </div>
     );
   }
 

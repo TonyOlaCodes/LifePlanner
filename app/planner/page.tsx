@@ -119,11 +119,13 @@ export default function PlannerPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: "",
+    description: "",
     category: "study",
     priority: "medium" as (typeof PRIORITIES)[number],
     dueDate: today,
     noDueDate: false,
   });
+  const [editingTask, setEditingTask] = useState<(Task & { noDueDate: boolean }) | null>(null);
   const [taskSort, setTaskSort] = useState<TaskSort>("due");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("both");
 
@@ -166,14 +168,34 @@ export default function PlannerPage() {
     await db.tasks.put({
       id: crypto.randomUUID(),
       title: taskForm.title.trim(),
+      description: taskForm.description.trim() || undefined,
       category: taskForm.category,
       completed: false,
       priority: taskForm.priority,
       dueDate: taskForm.noDueDate ? undefined : taskForm.dueDate,
       createdAt: Date.now(),
     });
-    setTaskForm({ title: "", category: "study", priority: "medium", dueDate: today, noDueDate: false });
+    setTaskForm({ title: "", description: "", category: "study", priority: "medium", dueDate: today, noDueDate: false });
     setAddOpen(false);
+  }
+
+  function openTask(task: Task) {
+    vibrate(20);
+    setEditingTask({ ...task, dueDate: task.dueDate ?? today, noDueDate: !task.dueDate });
+  }
+
+  async function saveTaskEdit() {
+    if (!editingTask || !editingTask.title.trim()) return;
+    vibrate(40);
+    await db.tasks.update(editingTask.id, {
+      title: editingTask.title.trim(),
+      description: editingTask.description?.trim() || undefined,
+      category: editingTask.category,
+      priority: editingTask.priority,
+      dueDate: editingTask.noDueDate ? undefined : editingTask.dueDate,
+      completed: editingTask.completed,
+    });
+    setEditingTask(null);
   }
 
   async function toggleTask(task: Task) {
@@ -184,6 +206,7 @@ export default function PlannerPage() {
   async function deleteTask(id: string) {
     vibrate([20, 20, 20]);
     await db.tasks.delete(id);
+    setEditingTask((t) => (t?.id === id ? null : t));
   }
 
   const CAT_LABEL: Record<string, string> = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label]));
@@ -314,11 +337,16 @@ export default function PlannerPage() {
                     border: `1px solid ${borderCol}`,
                     opacity: task.completed ? 0.55 : 1,
                     transition: "all 0.25s ease",
+                    cursor: "pointer",
                   }}
+                  onClick={() => openTask(task)}
                 >
                   <button
                     className="tap-scale"
-                    onClick={() => toggleTask(task)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTask(task);
+                    }}
                     style={{
                       background: "none",
                       border: "none",
@@ -360,7 +388,10 @@ export default function PlannerPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => deleteTask(task.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteTask(task.id);
+                    }}
                     style={{
                       background: "none",
                       border: "none",
@@ -391,6 +422,16 @@ export default function PlannerPage() {
               value={taskForm.title}
               onChange={(e) => setTaskForm((f) => ({ ...f, title: e.target.value }))}
               onKeyDown={(e) => e.key === "Enter" && addTask()}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Description</label>
+            <textarea
+              className="lock-input"
+              placeholder="Optional details"
+              value={taskForm.description}
+              onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
+              style={{ minHeight: 90, resize: "vertical" }}
             />
           </div>
           <div>
@@ -483,6 +524,78 @@ export default function PlannerPage() {
           </button>
         </div>
       </BottomSheet>
+
+      <BottomSheet open={!!editingTask} onClose={() => setEditingTask(null)} title={editingTask ? "Task details" : ""}>
+        {editingTask && (
+          <TaskEditor
+            task={editingTask}
+            setTask={setEditingTask}
+            onSave={() => void saveTaskEdit()}
+            onDelete={() => void deleteTask(editingTask.id)}
+          />
+        )}
+      </BottomSheet>
+    </div>
+  );
+}
+
+function TaskEditor({
+  task,
+  setTask,
+  onSave,
+  onDelete,
+}: {
+  task: Task & { noDueDate: boolean };
+  setTask: (task: Task & { noDueDate: boolean }) => void;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div>
+        <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Name</label>
+        <input className="lock-input" value={task.title} onChange={(e) => setTask({ ...task, title: e.target.value })} />
+      </div>
+      <div>
+        <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Description</label>
+        <textarea className="lock-input" value={task.description || ""} onChange={(e) => setTask({ ...task, description: e.target.value })} style={{ minHeight: 110, resize: "vertical" }} />
+      </div>
+      <div>
+        <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Category</label>
+        <select className="lock-input" value={task.category} onChange={(e) => setTask({ ...task, category: e.target.value })}>
+          {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+        <input type="checkbox" checked={task.noDueDate} onChange={(e) => setTask({ ...task, noDueDate: e.target.checked })} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
+        No due date
+      </label>
+      {!task.noDueDate && (
+        <div>
+          <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Due date</label>
+          <input type="date" className="lock-input" value={task.dueDate || ""} onChange={(e) => setTask({ ...task, dueDate: e.target.value })} />
+        </div>
+      )}
+      <div>
+        <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Importance</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          {PRIORITIES.map((p) => (
+            <button key={p} type="button" onClick={() => setTask({ ...task, priority: p })} style={{ flex: 1, padding: "10px 4px", borderRadius: 12, border: `1px solid ${task.priority === p ? P_COLOR[p] : "var(--border)"}`, background: task.priority === p ? `${P_COLOR[p]}20` : "var(--surface-3)", color: task.priority === p ? P_COLOR[p] : "var(--text-secondary)", fontWeight: 700, fontSize: 13, cursor: "pointer", textTransform: "capitalize" }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+        <input type="checkbox" checked={task.completed} onChange={(e) => setTask({ ...task, completed: e.target.checked })} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
+        Completed
+      </label>
+      <button type="button" className="tap-scale" onClick={onSave} style={{ padding: 16, borderRadius: 16, background: "var(--accent)", border: "none", color: "#000", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+        Save changes
+      </button>
+      <button type="button" className="tap-scale" onClick={onDelete} style={{ padding: 14, borderRadius: 14, background: "#EF444412", border: "1px solid #EF444425", color: "#EF4444", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+        Delete task
+      </button>
     </div>
   );
 }

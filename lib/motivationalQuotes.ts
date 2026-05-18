@@ -1,6 +1,6 @@
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
-/** Rotates every 6 hours (same quote for everyone on the same device clock window). */
+/** Rotates hourly (same quote for everyone on the same device clock window). */
 export const MOTIVATIONAL_QUOTES: readonly string[] = [
   "Discipline is choosing between what you want now and what you want most.",
   "Every day is a chance to be better than yesterday.",
@@ -141,6 +141,6 @@ export const MOTIVATIONAL_QUOTES: readonly string[] = [
 ];
 
 export function getRotatingQuote(): string {
-  const slot = Math.floor(Date.now() / SIX_HOURS_MS);
+  const slot = Math.floor(Date.now() / ONE_HOUR_MS);
   return MOTIVATIONAL_QUOTES[slot % MOTIVATIONAL_QUOTES.length]!;
 }

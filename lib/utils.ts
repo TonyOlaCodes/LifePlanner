@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, parseISO, differenceInDays } from "date-fns";
+import type { AppSettings } from "./db";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -22,7 +23,7 @@ export function getDaysUntil(dateStr: string): number {
 export function getSleepHours(bedtime: string, wakeTime: string): number {
   const [bh, bm] = bedtime.split(":").map(Number);
   const [wh, wm] = wakeTime.split(":").map(Number);
-  let bedMinutes = bh * 60 + bm;
+  const bedMinutes = bh * 60 + bm;
   let wakeMinutes = wh * 60 + wm;
   if (wakeMinutes < bedMinutes) wakeMinutes += 24 * 60;
   return parseFloat(((wakeMinutes - bedMinutes) / 60).toFixed(1));
@@ -42,7 +43,9 @@ export function vibrate(pattern: number | number[] = 50) {
 
 export { getRotatingQuote, MOTIVATIONAL_QUOTES } from "./motivationalQuotes";
 
-export const CATEGORY_CONFIG = {
+export type HabitCategoryConfig = { label: string; emoji: string; color: string };
+
+export const CATEGORY_CONFIG: Record<string, HabitCategoryConfig> = {
   sleep:      { label: "Sleep",      emoji: "😴", color: "#6366F1" },
   gym:        { label: "Gym",        emoji: "💪", color: "#EF4444" },
   faith:      { label: "Faith",      emoji: "🙏", color: "#F59E0B" },
@@ -51,4 +54,13 @@ export const CATEGORY_CONFIG = {
   content:    { label: "Content",    emoji: "🎥", color: "#EC4899" },
   study:      { label: "Study",      emoji: "📚", color: "#10B981" },
   custom:     { label: "Custom",     emoji: "⭐", color: "#F97316" },
-} as const;
+};
+
+export function getHabitCategoryConfig(settings?: Pick<AppSettings, "habitCategories"> | null): Record<string, HabitCategoryConfig> {
+  const custom = settings?.habitCategories || [];
+  if (!custom.length) return CATEGORY_CONFIG;
+  return {
+    ...CATEGORY_CONFIG,
+    ...Object.fromEntries(custom.map((c) => [c.id, { label: c.label, emoji: c.emoji, color: c.color }])),
+  };
+}

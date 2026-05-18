@@ -3,7 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { db, getTodayString, getStreakForHabit, type Task, type SleepLog, type WorkoutLog, type MetricLog, type Habit } from "@/lib/db";
-import { getRotatingQuote, CATEGORY_CONFIG, vibrate, formatDate } from "@/lib/utils";
+import { getRotatingQuote, getHabitCategoryConfig, vibrate, formatDate } from "@/lib/utils";
 import ProgressRing from "@/components/ui/ProgressRing";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { MiniTrendChart, type MiniTrendPoint } from "@/components/dashboard/MiniTrendChart";
@@ -79,9 +79,9 @@ function metricValueSeries(logs: MetricLog[] | undefined, name: string, today: s
 function seriesStats(series: MiniTrendPoint[], today: string, accountStartDate?: string) {
   const start =
     accountStartDate && accountStartDate.length >= 10 && accountStartDate <= today ? accountStartDate : today;
-  const past = series.filter((x) => x.d < today && x.d >= start);
-  const vals = past.map((x) => x.v).filter((v): v is number => v !== null && v !== undefined && v > 0);
-  const missed = past.filter((x) => x.v === null || x.v === undefined || x.v === 0).length;
+  const visible = series.filter((x) => x.d <= today && x.d >= start);
+  const vals = visible.map((x) => x.v).filter((v): v is number => v !== null && v !== undefined && v > 0);
+  const missed = visible.filter((x) => x.d < today && (x.v === null || x.v === undefined || x.v === 0)).length;
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
   const max = vals.length ? Math.max(...vals) : 0;
   const min = vals.length ? Math.min(...vals) : 0;
@@ -137,6 +137,7 @@ export default function DashboardPage() {
   const [workoutForm, setWorkoutForm] = useState({ name: "", duration: "60" });
   const [taskForm, setTaskForm] = useState({
     title: "",
+    description: "",
     category: "study",
     priority: "medium" as "low" | "medium" | "high",
     dueDate: today,
@@ -244,7 +245,8 @@ export default function DashboardPage() {
   const hasWeightToday = useMemo(() => (allMetrics || []).some((m) => m.date === today && m.name === "weight"), [allMetrics, today]);
   const hasCaloriesToday = useMemo(() => (allMetrics || []).some((m) => m.date === today && m.name === "calories"), [allMetrics, today]);
 
-  const HABIT_CAT_ORDER = useMemo(() => Object.keys(CATEGORY_CONFIG) as (keyof typeof CATEGORY_CONFIG)[], []);
+  const habitCategoryConfig = useMemo(() => getHabitCategoryConfig(settings), [settings]);
+  const HABIT_CAT_ORDER = useMemo(() => Object.keys(habitCategoryConfig), [habitCategoryConfig]);
 
   const scheduledTodayHabits = useMemo(
     () => (habits || []).filter((h) => Array.isArray(h.frequency) && h.frequency.includes(TODAY_KEY)),
@@ -267,7 +269,7 @@ export default function DashboardPage() {
       ...extraHabitsToday,
     ];
     const catRank = (c: string) => {
-      const i = HABIT_CAT_ORDER.indexOf(c as keyof typeof CATEGORY_CONFIG);
+      const i = HABIT_CAT_ORDER.indexOf(c);
       return i === -1 ? 99 : i;
     };
     function tier(h: Habit) {
@@ -278,9 +280,9 @@ export default function DashboardPage() {
       return 2;
     }
     return [...base].sort((a, b) => {
-      const cr = catRank(a.category) - catRank(b.category);
-      if (cr !== 0) return cr;
-      return tier(a) - tier(b);
+      const tr = tier(a) - tier(b);
+      if (tr !== 0) return tr;
+      return catRank(a.category) - catRank(b.category);
     });
   }, [scheduledTodayHabits, extraHabitsToday, completedIdsToday, HABIT_CAT_ORDER, TODAY_KEY]);
 
@@ -295,7 +297,7 @@ export default function DashboardPage() {
 
   const sortedTodayTasks = useMemo(() => {
     const raw = (allTasks || []).filter(
-      (t) => (t.dueDate && t.dueDate <= today) || (!t.dueDate && !t.completed)
+      (t) => !t.completed && ((t.dueDate && t.dueDate <= today) || !t.dueDate)
     );
     const byCatThenDue = (a: Task, b: Task) => {
       const cx = taskCatRank(a.category) - taskCatRank(b.category);
@@ -324,8 +326,6 @@ export default function DashboardPage() {
   const quote = getRotatingQuote();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-
-  const CAT_COLORS: Record<string, string> = { sleep: "#6366F1", gym: "#EF4444", faith: "#F59E0B", coding: "#8B5CF6", discipline: "#06B6D4", content: "#EC4899", study: "#10B981", custom: "#F97316" };
 
   async function toggleHabit(habitId: string) {
     vibrate(40);
@@ -389,6 +389,7 @@ export default function DashboardPage() {
     await db.tasks.put({
       id: crypto.randomUUID(),
       title: taskForm.title,
+      description: taskForm.description.trim() || undefined,
       category: taskForm.category,
       completed: false,
       priority: taskForm.priority,
@@ -396,7 +397,7 @@ export default function DashboardPage() {
       createdAt: Date.now(),
     });
     setQuickSheet(null);
-    setTaskForm({ title: "", category: "study", priority: "medium", dueDate: today, noDueDate: true });
+    setTaskForm({ title: "", description: "", category: "study", priority: "medium", dueDate: today, noDueDate: true });
   }
 
   return (
@@ -413,10 +414,9 @@ export default function DashboardPage() {
         </ProgressRing>
       </div>
 
-      {/* Quote — large pool, rotates every 6 hours */}
+      {/* Quote */}
       <div className="glass" style={{ borderRadius: 16, padding: "14px 16px", marginBottom: 20, borderLeft: "3px solid var(--accent)" }}>
         <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0, fontStyle: "italic" }}>"{quote}"</p>
-        <p style={{ fontSize: 10, color: "var(--text-tertiary)", margin: "8px 0 0", fontWeight: 600 }}>New quote every 6 hours</p>
       </div>
 
       {/* Score Card */}
@@ -485,6 +485,7 @@ export default function DashboardPage() {
               const done = completedIdsToday.has(habit.id);
               const streak = getStreakForHabit(allLogs || [], habit.id);
               const isExtra = !Array.isArray(habit.frequency) || !habit.frequency.includes(TODAY_KEY);
+              const categoryColor = habitCategoryConfig[habit.category]?.color || "#6EE7B7";
               return (
                 <div key={habit.id} className="tap-scale" onClick={() => toggleHabit(habit.id)}
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 18, background: done ? `${habit.color}10` : "var(--surface-2)", border: `1px solid ${done ? habit.color + "25" : "var(--border)"}`, cursor: "pointer", opacity: done ? 0.65 : 1, transition: "all 0.25s ease" }}>
@@ -498,8 +499,8 @@ export default function DashboardPage() {
                     </div>
                     {streak > 1 && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>🔥 {streak} day streak</p>}
                   </div>
-                  <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 100, background: `${CAT_COLORS[habit.category]}20`, color: CAT_COLORS[habit.category] || "var(--accent)", fontWeight: 600 }}>
-                    {isExtra ? "Extra · " : ""}{CATEGORY_CONFIG[habit.category]?.label}
+                  <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 100, background: `${categoryColor}20`, color: categoryColor, fontWeight: 600 }}>
+                    {isExtra ? "Extra · " : ""}{habitCategoryConfig[habit.category]?.label || habit.category}
                   </span>
                 </div>
               );
@@ -547,7 +548,7 @@ export default function DashboardPage() {
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Streaks</h2>
         <div style={{ display: "flex", gap: 10, overflowX: "auto" }}>
-          {Object.entries(CATEGORY_CONFIG)
+          {Object.entries(habitCategoryConfig)
             .map(([key, cfg]) => ({ key, cfg, catHabits: (habits || []).filter(h => h.category === key) }))
             .filter(({ catHabits }) => catHabits.length > 0)
             .slice(0, 6)
@@ -784,6 +785,10 @@ export default function DashboardPage() {
           <div>
             <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Task</label>
             <input type="text" className="lock-input" placeholder="What needs doing?" value={taskForm.title} onChange={(e) => setTaskForm((p) => ({ ...p, title: e.target.value }))} />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Description</label>
+            <textarea className="lock-input" placeholder="Optional details" value={taskForm.description} onChange={(e) => setTaskForm((p) => ({ ...p, description: e.target.value }))} style={{ minHeight: 84, resize: "vertical" }} />
           </div>
           <div>
             <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Category</label>

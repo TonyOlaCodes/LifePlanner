@@ -4,7 +4,7 @@ export interface Habit {
   id: string;
   title: string;
   emoji: string;
-  category: "sleep" | "gym" | "faith" | "coding" | "discipline" | "content" | "study" | "custom";
+  category: string;
   frequency: string[]; // ['mon','tue','wed','thu','fri','sat','sun']
   targetValue?: number;
   unit?: string;
@@ -73,6 +73,7 @@ export interface Exam {
 export interface Task {
   id: string;
   title: string;
+  description?: string;
   category: string;
   dueDate?: string;
   completed: boolean;
@@ -234,26 +235,11 @@ export interface AppSettings {
   focusShowMonthlyBar?: boolean;
   /** Which quick-log tiles appear on Home (subset of sleep | workout | weight | calories) */
   quickLogKeys?: ("sleep" | "workout" | "weight" | "calories")[];
+  habitCategories?: { id: string; label: string; emoji: string; color: string }[];
   /** True after first-install starter pack was applied or skipped */
   bootstrapPackApplied?: boolean;
   /** First day we attribute insights / “missed” to (YYYY-MM-DD); set on install or inferred once for existing data */
   accountStartDate?: string;
-  /** Per-type local notification toggles */
-  notificationReminders?: {
-    daily: boolean;
-    habits: boolean;
-    study: boolean;
-    sleep: boolean;
-    streaks: boolean;
-    focus: boolean;
-  };
-  /** User saw the explain-before-ask notification sheet */
-  notificationExplained?: boolean;
-  lastDailyReminderDate?: string;
-  lastHabitReminderDate?: string;
-  lastStudyReminderDate?: string;
-  lastSleepReminderDate?: string;
-  lastStreakReminderDate?: string;
 }
 
 export class LockInDatabase extends Dexie {

@@ -6,10 +6,13 @@ import { db, initializeSettings, seedDefaultHabits, seedBootstrapPack } from "@/
 import BottomNav from "./BottomNav";
 import { PageTransition } from "./PageTransition";
 import { useLiveQuery } from "dexie-react-hooks";
-import { PwaExperience } from "@/components/pwa/PwaExperience";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { SyncStatus } from "@/components/pwa/SyncStatus";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { setSettings } = useAppStore();
+
   const settings = useLiveQuery(() => db.settings.get(1));
 
   useEffect(() => {
@@ -35,9 +38,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <PwaExperience>
+    <>
+      <OfflineIndicator />
+      <SyncStatus />
+      <InstallPrompt />
       <PageTransition>{children}</PageTransition>
       <BottomNav />
-    </PwaExperience>
+    </>
   );
 }

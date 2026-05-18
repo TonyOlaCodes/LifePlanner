@@ -3,10 +3,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { db, getTodayString, getStreakForHabit, type Habit } from "@/lib/db";
-import { CATEGORY_CONFIG, vibrate } from "@/lib/utils";
+import { CATEGORY_CONFIG, getHabitCategoryConfig, vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
-import { Plus, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
-import { format, subDays, startOfWeek, subWeeks, addDays } from "date-fns";
+import { Plus, Trash2, Pencil, ChevronDown, ChevronUp, Settings2 } from "lucide-react";
+import { format, startOfWeek, subWeeks, addDays } from "date-fns";
 
 const DAYS = ["mon","tue","wed","thu","fri","sat","sun"];
 const DAY_LABELS = ["M","T","W","T","F","S","S"];
@@ -45,14 +45,17 @@ export default function HabitsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("weekly");
 
   const [addOpen, setAddOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryDrafts, setCategoryDrafts] = useState<{ id: string; label: string; emoji: string; color: string }[]>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editEmojiOpen, setEditEmojiOpen] = useState(false);
-  const [form, setForm] = useState({ title:"", emoji:"⭐", category:"custom" as Habit["category"], frequency: [...DAYS], color: COLORS[0] });
+  const [form, setForm] = useState({ title:"", emoji:"⭐", category:"custom", frequency: [...DAYS], color: COLORS[0] });
   /** One object so active days / color / emoji stay in sync when opening edit (avoids stale split state). */
   const [habitEdit, setHabitEdit] = useState<{
     id: string;
     title: string;
     emoji: string;
+    category: string;
     frequency: string[];
     color: string;
   } | null>(null);
@@ -62,6 +65,7 @@ export default function HabitsPage() {
   const allLogs = useLiveQuery(() => db.habitLogs.toArray(), []);
   const settings = useLiveQuery(() => db.settings.get(1), []);
   const accountStart = settings?.accountStartDate ?? today;
+  const categoryConfig = getHabitCategoryConfig(settings);
 
   const todayHabits = (habits || []).filter((h) => Array.isArray(h.frequency) && h.frequency.includes(TODAY_KEY));
   const completedIdsToday = (todayLogs || []).filter((l) => l.completed).map((l) => l.habitId);
@@ -105,6 +109,8 @@ export default function HabitsPage() {
     vibrate(50);
     await db.habits.update(habitEdit.id, {
       emoji: habitEdit.emoji,
+      title: habitEdit.title.trim(),
+      category: habitEdit.category,
       frequency: habitEdit.frequency,
       color: habitEdit.color,
     });
@@ -129,6 +135,7 @@ export default function HabitsPage() {
       id: habit.id,
       title: habit.title,
       emoji: habit.emoji,
+      category: habit.category,
       frequency,
       color: habit.color,
     });
@@ -146,7 +153,42 @@ export default function HabitsPage() {
     });
   }
 
-  const grouped = Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => {
+  function openCategories() {
+    setCategoryDrafts(Object.entries(categoryConfig).map(([id, cfg]) => ({ id, ...cfg })));
+    setCategoryOpen(true);
+  }
+
+  async function saveCategories() {
+    const seen = new Set<string>();
+    const cleaned = categoryDrafts
+      .map((c) => ({
+        id: c.id || c.label.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+        label: c.label.trim(),
+        emoji: c.emoji.trim() || "â­",
+        color: c.color || COLORS[0],
+      }))
+      .filter((c) => c.id && c.label && !seen.has(c.id) && (seen.add(c.id), true));
+    await db.settings.update(1, { habitCategories: cleaned });
+    setCategoryOpen(false);
+  }
+
+  function consistencyPercent(habit: Habit, dates: string[]) {
+    const logs = new Map((allLogs || []).filter((l) => l.habitId === habit.id).map((l) => [l.date, l.completed]));
+    const createdDateStr = format(new Date(habit.createdAt), "yyyy-MM-dd");
+    let scheduled = 0;
+    let completed = 0;
+    for (const date of dates) {
+      const dObj = new Date(date);
+      const dayKey = DAYS[dObj.getDay() === 0 ? 6 : dObj.getDay() - 1];
+      if (date < createdDateStr || date > today) continue;
+      if (!Array.isArray(habit.frequency) || !habit.frequency.includes(dayKey)) continue;
+      scheduled++;
+      if (logs.get(date)) completed++;
+    }
+    return scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
+  }
+
+  const grouped = Object.entries(categoryConfig).map(([key, cfg]) => {
     const catHabits = (habits || []).filter((h) => h.category === key);
     const sorted = [
       ...catHabits.filter((h) => !completedIdsToday.includes(h.id)),
@@ -165,10 +207,16 @@ export default function HabitsPage() {
             {(todayLogs || []).filter((l) => l.completed).length}/{todayHabits.length} done today
           </p>
         </div>
-        <button className="tap-scale" onClick={()=>setAddOpen(true)}
-          style={{ width:44, height:44, borderRadius:14, background:"var(--accent)", border:"none", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-          <Plus size={22} style={{color:"#000"}} />
-        </button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="tap-scale" onClick={openCategories}
+            style={{ width:44, height:44, borderRadius:14, background:"var(--surface-2)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"var(--text-secondary)" }}>
+            <Settings2 size={19} />
+          </button>
+          <button className="tap-scale" onClick={()=>setAddOpen(true)}
+            style={{ width:44, height:44, borderRadius:14, background:"var(--accent)", border:"none", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+            <Plus size={22} style={{color:"#000"}} />
+          </button>
+        </div>
       </div>
 
       {/* View Toggle */}
@@ -193,6 +241,7 @@ export default function HabitsPage() {
               const done = (todayLogs || []).some((l) => l.habitId === habit.id && l.completed);
               const streak = getStreakForHabit(allLogs||[], habit.id);
               const logMap = Object.fromEntries((allLogs||[]).filter(l=>l.habitId===habit.id).map(l=>[l.date,l.completed]));
+              const consistency = consistencyPercent(habit, viewMode === "weekly" ? last7 : last28);
               
               // Only apply partial opacity if the habit is NOT scheduled for today
               const isScheduledToday = Array.isArray(habit.frequency) && habit.frequency.includes(TODAY_KEY);
@@ -219,7 +268,9 @@ export default function HabitsPage() {
                         <span style={{ fontSize:16 }}>{habit.emoji}</span>
                         <span style={{ fontSize:15, fontWeight:600, textDecoration:done?"line-through":"none", color:done?"var(--text-secondary)":"var(--text-primary)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{habit.title}</span>
                       </div>
-                      {streak > 0 && <p style={{ margin:"3px 0 0", fontSize:11, color:"var(--text-tertiary)" }}>🔥 {streak} day streak</p>}
+                      <p style={{ margin:"3px 0 0", fontSize:11, color:"var(--text-tertiary)" }}>
+                        {streak > 0 ? `🔥 ${streak} day streak · ` : ""}{consistency}% consistent
+                      </p>
                     </div>
                     {!isScheduledToday && <span style={{ fontSize:10, color:"var(--text-tertiary)", fontWeight:600, marginRight:4, padding:"2px 6px", borderRadius:4, background:"var(--surface-3)" }}>Not Today</span>}
                     <button onClick={(e) => openEdit(habit, e)}
@@ -347,8 +398,8 @@ export default function HabitsPage() {
 
           <div>
             <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:6 }}>Category</label>
-            <select className="lock-input" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value as Habit["category"]}))}>
-              {Object.entries(CATEGORY_CONFIG).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+            <select className="lock-input" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+              {Object.entries(categoryConfig).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
             </select>
           </div>
 
@@ -385,6 +436,18 @@ export default function HabitsPage() {
       <BottomSheet open={!!habitEdit} onClose={()=>{setHabitEdit(null);setEditEmojiOpen(false);}} title={habitEdit ? `Edit: ${habitEdit.title}` : ""}>
         {habitEdit && (
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:6 }}>Habit Name</label>
+              <input type="text" className="lock-input" value={habitEdit.title} onChange={(e)=>setHabitEdit(f=>(f?{...f,title:e.target.value}:f))} />
+            </div>
+
+            <div>
+              <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:6 }}>Category</label>
+              <select className="lock-input" value={habitEdit.category} onChange={(e)=>setHabitEdit(f=>(f?{...f,category:e.target.value}:f))}>
+                {Object.entries(categoryConfig).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+              </select>
+            </div>
+
             {/* Emoji picker */}
             <div>
               <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:8 }}>Icon</label>
@@ -443,6 +506,36 @@ export default function HabitsPage() {
             </button>
           </div>
         )}
+      </BottomSheet>
+
+      <BottomSheet open={categoryOpen} onClose={()=>setCategoryOpen(false)} title="Habit Categories">
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {Object.entries(CATEGORY_CONFIG).filter(([id]) => !categoryDrafts.some((cat) => cat.id === id)).map(([id, cfg]) => (
+              <div key={id} style={{ display:"flex", alignItems:"center", gap:8, padding:10, borderRadius:12, background:"var(--surface-2)", border:"1px solid var(--border)" }}>
+                <span>{cfg.emoji}</span>
+                <span style={{ fontSize:13, fontWeight:700, color:"var(--text-primary)" }}>{cfg.label}</span>
+                <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text-tertiary)" }}>Default</span>
+              </div>
+            ))}
+          </div>
+          {categoryDrafts.map((cat, idx) => (
+            <div key={idx} style={{ padding:12, borderRadius:14, background:"var(--surface-2)", border:"1px solid var(--border)", display:"grid", gridTemplateColumns:"44px 1fr 44px", gap:8, alignItems:"center" }}>
+              <input className="lock-input" value={cat.emoji} onChange={(e)=>setCategoryDrafts((rows)=>rows.map((r,i)=>i===idx?{...r,emoji:e.target.value}:r))} style={{ padding:"10px 8px", textAlign:"center" }} />
+              <input className="lock-input" value={cat.label} placeholder="Category name" onChange={(e)=>setCategoryDrafts((rows)=>rows.map((r,i)=>i===idx?{...r,label:e.target.value,id:r.id || e.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}:r))} />
+              <input type="color" value={cat.color} onChange={(e)=>setCategoryDrafts((rows)=>rows.map((r,i)=>i===idx?{...r,color:e.target.value}:r))} style={{ width:44, height:44, borderRadius:12, border:"1px solid var(--border)", background:"var(--surface-3)", padding:2 }} />
+              <button type="button" onClick={()=>setCategoryDrafts((rows)=>rows.filter((_,i)=>i!==idx))} style={{ gridColumn:"1 / -1", padding:8, borderRadius:10, border:"1px solid #EF444430", background:"#EF444412", color:"#EF4444", fontSize:12, fontWeight:700 }}>
+                Remove category
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={()=>setCategoryDrafts((rows)=>[...rows,{ id:"", label:"", emoji:"⭐", color:COLORS[0] }])} style={{ padding:12, borderRadius:12, border:"1px dashed var(--border)", background:"transparent", color:"var(--text-secondary)", fontWeight:700 }}>
+            Add category
+          </button>
+          <button type="button" className="tap-scale" onClick={()=>void saveCategories()} style={{ padding:16, borderRadius:16, background:"var(--accent)", border:"none", color:"#000", fontSize:15, fontWeight:700, cursor:"pointer", width:"100%" }}>
+            Save categories
+          </button>
+        </div>
       </BottomSheet>
     </div>
   );
