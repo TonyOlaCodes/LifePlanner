@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { db, type FoodItem } from "@/lib/db";
 import {
   applyRestockBatch,
-  getDefaultPurchaseAmount,
   getParLevel,
   getStockStatus,
   isShoppingCandidate,
@@ -14,12 +13,12 @@ import { formatFoodQuantity } from "@/lib/foodUnits";
 import { vibrate } from "@/lib/utils";
 import { Check, ShoppingCart, X } from "lucide-react";
 
-type RestockLine = { foodItemId: string; amount: string; enabled: boolean };
+type RestockLine = { foodItemId: string; packs: string; enabled: boolean };
 
 function defaultLine(item: FoodItem): RestockLine {
   return {
     foodItemId: item.id,
-    amount: String(getDefaultPurchaseAmount(item)),
+    packs: "1",
     enabled: true,
   };
 }
@@ -38,7 +37,7 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
 
   const enabledCount = restockLines.filter((l) => {
     if (!l.enabled) return false;
-    const n = parseFloat(l.amount);
+    const n = parseFloat(l.packs);
     return Number.isFinite(n) && n > 0;
   }).length;
 
@@ -76,8 +75,9 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
       .filter((l) => l.enabled)
       .map((l) => {
         const item = items.find((i) => i.id === l.foodItemId);
-        const amount = parseFloat(l.amount);
-        if (!item || !Number.isFinite(amount) || amount <= 0) return null;
+        const packs = parseFloat(l.packs);
+        if (!item || !Number.isFinite(packs) || packs <= 0) return null;
+        const amount = getParLevel(item) * packs;
         return { foodItemId: l.foodItemId, amount, unit: item.unit };
       })
       .filter(Boolean) as { foodItemId: string; amount: number; unit: string }[];
@@ -122,8 +122,8 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
     return (
       <div className="shopping-trip">
         <p className="shopping-hint">
-          Enter how much you <strong style={{ color: "var(--text-primary)", fontWeight: 700 }}>bought</strong>. That
-          full amount is added on top of what you already have.
+          Enter how many <strong style={{ color: "var(--text-primary)", fontWeight: 700 }}>packs</strong> you bought.
+          Each pack adds that food's saved full pack amount.
         </p>
         {msg && <p className={msg.type === "ok" ? "shopping-msg-ok" : "shopping-msg-err"}>{msg.text}</p>}
         <div className="shopping-list-scroll">
@@ -135,7 +135,8 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
           {restockLines.map((line) => {
             const item = items.find((i) => i.id === line.foodItemId);
             if (!item) return null;
-            const bought = parseFloat(line.amount);
+            const packs = parseFloat(line.packs);
+            const bought = Number.isFinite(packs) && packs > 0 ? getParLevel(item) * packs : NaN;
             const after =
               Number.isFinite(bought) && bought > 0
                 ? previewQuantityAfterPurchase(item, bought, item.unit)
@@ -156,7 +157,7 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
                 <div className="shopping-row-body">
                   <span className="shopping-name">{item.name}</span>
                   <span className="shopping-meta">
-                    Have {formatFoodQuantity(item.quantity, item.unit)}
+                    Have {formatFoodQuantity(item.quantity, item.unit)} · pack {formatFoodQuantity(getParLevel(item), item.unit)}
                     {after != null && line.enabled && (
                       <> · after → {formatFoodQuantity(after, item.unit)}</>
                     )}
@@ -170,11 +171,11 @@ export default function ShoppingTab({ items }: { items: FoodItem[] }) {
                     min={0}
                     step="any"
                     placeholder="0"
-                    value={line.amount}
-                    onChange={(e) => updateLine(line.foodItemId, { amount: e.target.value })}
+                    value={line.packs}
+                    onChange={(e) => updateLine(line.foodItemId, { packs: e.target.value })}
                     onClick={(e) => e.stopPropagation()}
                   />
-                  <span className="shopping-unit">{item.unit}</span>
+                  <span className="shopping-unit">packs</span>
                 </div>
               </label>
             );

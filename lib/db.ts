@@ -356,6 +356,21 @@ export async function seedDefaultHabits() {
     { id: crypto.randomUUID(), title: "No Mindless Scroll", emoji: "📵", category: "discipline", frequency: ["mon","tue","wed","thu","fri","sat","sun"], color: "#06B6D4", order: 4, createdAt: Date.now(), archived: 0 },
     { id: crypto.randomUUID(), title: "Study Session", emoji: "📚", category: "study", frequency: ["mon","tue","wed","thu","fri"], color: "#10B981", order: 5, createdAt: Date.now(), archived: 0 },
   ];
+  const daily = ["mon","tue","wed","thu","fri","sat","sun"];
+  const weekdays = ["mon","tue","wed","thu","fri"];
+  const now = Date.now();
+  defaults.push(
+    { id: crypto.randomUUID(), title: "Steps", emoji: "👟", category: "gym", frequency: daily, color: "#22C55E", order: 6, createdAt: now + 6, archived: 0 },
+    { id: crypto.randomUUID(), title: "Drink Water", emoji: "💧", category: "sleep", frequency: daily, color: "#38BDF8", order: 7, createdAt: now + 7, archived: 0 },
+    { id: crypto.randomUUID(), title: "Skin Care Routine", emoji: "🧴", category: "discipline", frequency: daily, color: "#F472B6", order: 8, createdAt: now + 8, archived: 0 },
+    { id: crypto.randomUUID(), title: "Haircare Routine", emoji: "🪮", category: "discipline", frequency: ["mon","wed","fri","sun"], color: "#F97316", order: 9, createdAt: now + 9, archived: 0 },
+    { id: crypto.randomUUID(), title: "Supplements", emoji: "💊", category: "discipline", frequency: daily, color: "#A3E635", order: 10, createdAt: now + 10, archived: 0 },
+    { id: crypto.randomUUID(), title: "Cardio", emoji: "🏃", category: "gym", frequency: ["tue","thu","sat"], color: "#EF4444", order: 11, createdAt: now + 11, archived: 0 },
+    { id: crypto.randomUUID(), title: "Exam Study", emoji: "📝", category: "study", frequency: weekdays, color: "#10B981", order: 12, createdAt: now + 12, archived: 0 },
+    { id: crypto.randomUUID(), title: "Work On Project", emoji: "🛠️", category: "coding", frequency: weekdays, color: "#8B5CF6", order: 13, createdAt: now + 13, archived: 0 },
+    { id: crypto.randomUUID(), title: "Post Content Video", emoji: "🎥", category: "content", frequency: ["mon","wed","fri"], color: "#EC4899", order: 14, createdAt: now + 14, archived: 0 },
+    { id: crypto.randomUUID(), title: "Screen Time Under 10h", emoji: "⏳", category: "discipline", frequency: daily, color: "#06B6D4", order: 15, createdAt: now + 15, archived: 0 }
+  );
   await db.habits.bulkPut(defaults);
 }
 

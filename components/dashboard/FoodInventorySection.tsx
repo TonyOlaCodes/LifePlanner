@@ -35,7 +35,6 @@ import {
   Pencil,
   ChevronDown,
   ChevronUp,
-  Check,
 } from "lucide-react";
 
 type SheetTab = "inventory" | "meals" | "shopping";
@@ -48,6 +47,12 @@ const FOOD_EMOJIS = [
   "🥫", "🧃", "☕", "🍵", "🫒", "🧂", "🍯", "🥜", "🍫", "🍪", "🧁", "🍩",
   "🥗", "🍕", "🍜", "🍲", "🥡", "🍱", "🥘", "🍣", "🥟", "🍤",
   "🧊", "🍦", "🥤", "🍶",
+];
+
+const EXTRA_FOOD_EMOJIS = [
+  "🥛", "🧃", "🥤", "🧋", "🍶", "🍵", "🫖", "🥣", "🧆", "🥙", "🫓", "🥨",
+  "🍿", "🥫", "🫘", "🫛", "🧄", "🥜", "🌰", "🍯", "🧂", "🍰", "🧁", "🍫",
+  "🍷", "🥂", "🥃", "🍺", "🍾", "🧇", "🥞", "🍳", "🥗", "🍲", "🍛", "🍚",
 ];
 
 export default function FoodInventorySection() {
@@ -320,7 +325,7 @@ function FoodItemRow({
             )}
           </div>
           <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>
-            {formatFoodQuantity(item.quantity, item.unit)}
+            {stockAmountLabel(item)}
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -375,6 +380,10 @@ function stockRatio(item: FoodItem): number {
   return par > 0 ? item.quantity / par : 0;
 }
 
+function stockAmountLabel(item: FoodItem): string {
+  return `${formatFoodQuantity(item.quantity, item.unit)} / ${formatFoodQuantity(getParLevel(item), item.unit)}`;
+}
+
 function stockColor(item: FoodItem): string {
   const ratio = stockRatio(item);
   if (ratio >= 1) return "#22C55E";
@@ -412,7 +421,7 @@ function FoodCompactCard({ item, onOpen }: { item: FoodItem; onOpen: () => void 
         <span style={{ fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
       </div>
       <span style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {formatFoodQuantity(item.quantity, item.unit)}
+        {stockAmountLabel(item)}
       </span>
       <div style={{ marginTop: "auto", height: 6, borderRadius: 100, background: "var(--surface-3)", overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${progress}%`, background: color, borderRadius: 100 }} />
@@ -495,22 +504,25 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🥫");
-  const [qty, setQty] = useState("");
+  const [packCount, setPackCount] = useState("1");
   const [unitKind, setUnitKind] = useState<UnitKind>("weight");
   const [unit, setUnit] = useState("g");
   const [low, setLow] = useState("");
   const [par, setPar] = useState("");
   const [err, setErr] = useState("");
+  const packSize = parseFloat(par);
+  const packs = parseFloat(packCount);
+  const computedQuantity = Number.isFinite(packSize) && Number.isFinite(packs) ? packSize * packs : NaN;
 
   async function save() {
     setErr("");
-    const quantity = parseFloat(qty);
+    const quantity = computedQuantity;
     if (!name.trim()) {
       setErr("Enter a food name");
       return;
     }
     if (!Number.isFinite(quantity) || quantity < 0) {
-      setErr("Enter a valid quantity");
+      setErr("Enter a valid full pack amount and pack count");
       return;
     }
     const now = Date.now();
@@ -521,14 +533,14 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
       quantity,
       unit,
       lowStockThreshold: low ? parseFloat(low) : undefined,
-      parLevel: par ? parseFloat(par) : undefined,
+      parLevel: packSize,
       outOfStockAlert: true,
       createdAt: now,
       updatedAt: now,
     });
     vibrate(40);
     setName("");
-    setQty("");
+    setPackCount("1");
     setLow("");
     setPar("");
     setExpanded(false);
@@ -569,7 +581,7 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
       {expanded && (
         <>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12, marginBottom: 10, maxHeight: 120, overflowY: "auto" }}>
-        {FOOD_EMOJIS.map((e, i) => (
+        {[...FOOD_EMOJIS, ...EXTRA_FOOD_EMOJIS].map((e, i) => (
           <button
             key={`${e}-${i}`}
             type="button"
@@ -589,8 +601,8 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
         ))}
       </div>
       <input className="lock-input" placeholder="Name (e.g. Milk)" value={name} onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
+      <input className="lock-input" placeholder="Custom emoji" value={emoji} onChange={(e) => setEmoji(e.target.value)} style={{ marginBottom: 10 }} />
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <input className="lock-input" type="number" min={0} step="any" placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} style={{ flex: 1 }} />
         <select
           className="lock-input"
           value={unitKind}
@@ -616,8 +628,14 @@ function AddFoodForm({ onSaved }: { onSaved?: () => void }) {
         </select>
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <input className="lock-input" type="number" min={0} step="any" placeholder="Low stock at" value={low} onChange={(e) => setLow(e.target.value)} style={{ flex: 1 }} />
-        <input className="lock-input" type="number" min={0} step="any" placeholder="Full stock (par)" value={par} onChange={(e) => setPar(e.target.value)} style={{ flex: 1 }} />
+        <input className="lock-input" type="number" min={0} step="any" placeholder={`Full pack (${unit})`} value={par} onChange={(e) => setPar(e.target.value)} style={{ flex: 1 }} />
+        <input className="lock-input" type="number" min={0} step="any" placeholder="Packs" value={packCount} onChange={(e) => setPackCount(e.target.value)} style={{ flex: 1 }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+        <input className="lock-input" type="number" min={0} step="any" placeholder={`Low stock (${unit})`} value={low} onChange={(e) => setLow(e.target.value)} style={{ flex: 1 }} />
+        <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)", fontWeight: 700 }}>
+          Saves {Number.isFinite(computedQuantity) ? formatFoodQuantity(computedQuantity, unit) : formatFoodQuantity(0, unit)}
+        </span>
       </div>
       {err && <p style={{ color: "#EF4444", fontSize: 12, margin: "0 0 8px" }}>{err}</p>}
       <button type="button" className="tap-scale" onClick={() => void save()} style={primaryBtn}>
@@ -638,20 +656,28 @@ function EditFoodForm({
   onDone: () => void;
   onDelete: () => void;
 }) {
-  const [qty, setQty] = useState(String(item.quantity));
+  const [name, setName] = useState(item.name);
+  const [emoji, setEmoji] = useState(item.emoji || "🥫");
   const [low, setLow] = useState(item.lowStockThreshold != null ? String(item.lowStockThreshold) : "");
   const [par, setPar] = useState(item.parLevel != null ? String(item.parLevel) : "");
+  const [packCount, setPackCount] = useState(item.parLevel && item.parLevel > 0 ? String(Math.round((item.quantity / item.parLevel) * 100) / 100) : "1");
   const [quickAdd, setQuickAdd] = useState(item.quickAddAmount != null ? String(item.quickAddAmount) : "");
   const [quickUse, setQuickUse] = useState(item.quickConsumeAmount != null ? String(item.quickConsumeAmount) : "");
   const [outAlert, setOutAlert] = useState(item.outOfStockAlert !== false);
+  const packSize = parseFloat(par);
+  const packs = parseFloat(packCount);
+  const computedQuantity = Number.isFinite(packSize) && Number.isFinite(packs) ? packSize * packs : NaN;
 
   async function save() {
-    const quantity = parseFloat(qty);
+    const quantity = computedQuantity;
     if (!Number.isFinite(quantity) || quantity < 0) return;
+    if (!name.trim()) return;
     await db.foodItems.update(item.id, {
+      name: name.trim(),
+      emoji: emoji.trim() || undefined,
       quantity,
       lowStockThreshold: low ? parseFloat(low) : undefined,
-      parLevel: par ? parseFloat(par) : undefined,
+      parLevel: packSize,
       quickAddAmount: quickAdd ? parseFloat(quickAdd) : undefined,
       quickConsumeAmount: quickUse ? parseFloat(quickUse) : undefined,
       outOfStockAlert: outAlert,
@@ -669,17 +695,34 @@ function EditFoodForm({
 
   return (
     <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "var(--surface-3)", border: "1px solid var(--border)" }}>
-      <label style={labelStyle}>Quantity ({item.unit})</label>
-      <input className="lock-input" type="number" min={0} step="any" value={qty} onChange={(e) => setQty(e.target.value)} style={{ marginBottom: 10 }} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div style={{ width: 58 }}>
+          <label style={labelStyle}>Emoji</label>
+          <input className="lock-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} style={{ textAlign: "center" }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Name</label>
+          <input className="lock-input" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Low stock at</label>
-          <input className="lock-input" type="number" min={0} step="any" value={low} onChange={(e) => setLow(e.target.value)} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Par level</label>
+          <label style={labelStyle}>Full pack ({item.unit})</label>
           <input className="lock-input" type="number" min={0} step="any" value={par} onChange={(e) => setPar(e.target.value)} />
         </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Packs</label>
+          <input className="lock-input" type="number" min={0} step="any" value={packCount} onChange={(e) => setPackCount(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Low stock at ({item.unit})</label>
+          <input className="lock-input" type="number" min={0} step="any" value={low} onChange={(e) => setLow(e.target.value)} />
+        </div>
+        <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)", fontWeight: 700 }}>
+          Saves {Number.isFinite(computedQuantity) ? formatFoodQuantity(computedQuantity, item.unit) : formatFoodQuantity(0, item.unit)}
+        </span>
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
@@ -730,7 +773,7 @@ function MealsTab({
   templates: MealTemplate[];
   today: string;
 }) {
-  const [mode, setMode] = useState<"templates" | "log" | "create">("templates");
+  const [mode, setMode] = useState<"templates" | "log" | "create" | "edit">("templates");
   const [mealName, setMealName] = useState("");
   const [ingredients, setIngredients] = useState<MealIngredient[]>([]);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -738,6 +781,7 @@ function MealsTab({
   const [tplName, setTplName] = useState("");
   const [tplEmoji, setTplEmoji] = useState("🍽️");
   const [tplIngredients, setTplIngredients] = useState<MealIngredient[]>([]);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
   async function logMeal(ings: MealIngredient[], name: string) {
     setMsg(null);
@@ -773,6 +817,30 @@ function MealsTab({
     });
     vibrate(40);
     setTplName("");
+    setTplIngredients([]);
+    setMode("templates");
+  }
+
+  function editTemplate(t: MealTemplate) {
+    vibrate(20);
+    setEditingTemplateId(t.id);
+    setTplName(t.name);
+    setTplEmoji(t.emoji || "🍽️");
+    setTplIngredients(ingredientsFromTemplate(t));
+    setMode("edit");
+  }
+
+  async function updateTemplate() {
+    if (!editingTemplateId || !tplName.trim() || !tplIngredients.length) return;
+    await db.mealTemplates.update(editingTemplateId, {
+      name: tplName.trim(),
+      emoji: tplEmoji.trim() || undefined,
+      ingredients: tplIngredients,
+    });
+    vibrate(40);
+    setEditingTemplateId(null);
+    setTplName("");
+    setTplEmoji("🍽️");
     setTplIngredients([]);
     setMode("templates");
   }
@@ -877,6 +945,23 @@ function MealsTab({
                 >
                   Delete template
                 </button>
+                <button
+                  type="button"
+                  onClick={() => editTemplate(t)}
+                  style={{
+                    marginTop: 8,
+                    marginLeft: 12,
+                    padding: 0,
+                    border: "none",
+                    background: "none",
+                    color: "var(--accent)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Edit meal
+                </button>
               </div>
             ))
           )}
@@ -896,7 +981,10 @@ function MealsTab({
 
       {mode === "create" && (
         <div>
-          <input className="lock-input" placeholder="Template name (e.g. Cereal bowl)" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ marginBottom: 10 }} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input className="lock-input" placeholder="Emoji" value={tplEmoji} onChange={(e) => setTplEmoji(e.target.value)} style={{ width: 64, textAlign: "center" }} />
+            <input className="lock-input" placeholder="Template name (e.g. Cereal bowl)" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ flex: 1 }} />
+          </div>
           <MealBuilder
             items={items}
             mealName=""
@@ -907,6 +995,26 @@ function MealsTab({
           />
           <button type="button" className="tap-scale" onClick={() => void saveTemplate()} style={{ ...primaryBtn, marginTop: 12 }}>
             Save template
+          </button>
+        </div>
+      )}
+
+      {mode === "edit" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input className="lock-input" placeholder="Emoji" value={tplEmoji} onChange={(e) => setTplEmoji(e.target.value)} style={{ width: 64, textAlign: "center" }} />
+            <input className="lock-input" placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ flex: 1 }} />
+          </div>
+          <MealBuilder
+            items={items}
+            mealName=""
+            setMealName={() => {}}
+            ingredients={tplIngredients}
+            setIngredients={setTplIngredients}
+            hideName
+          />
+          <button type="button" className="tap-scale" onClick={() => void updateTemplate()} style={{ ...primaryBtn, marginTop: 12 }}>
+            Save meal changes
           </button>
         </div>
       )}
@@ -1009,7 +1117,7 @@ function MealBuilder({
             <option value="">Pick food…</option>
             {items.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.emoji} {f.name} ({formatFoodQuantity(f.quantity, f.unit)} left)
+                {f.emoji} {f.name} ({stockAmountLabel(f)})
               </option>
             ))}
           </select>

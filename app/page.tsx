@@ -77,8 +77,10 @@ function metricValueSeries(logs: MetricLog[] | undefined, name: string, today: s
 }
 
 function seriesStats(series: MiniTrendPoint[], today: string, accountStartDate?: string) {
-  const start =
+  const accountStart =
     accountStartDate && accountStartDate.length >= 10 && accountStartDate <= today ? accountStartDate : today;
+  const firstLogged = series.find((x) => x.v !== null && x.v !== undefined && x.v > 0)?.d;
+  const start = firstLogged && firstLogged > accountStart ? firstLogged : accountStart;
   const visible = series.filter((x) => x.d <= today && x.d >= start);
   const vals = visible.map((x) => x.v).filter((v): v is number => v !== null && v !== undefined && v > 0);
   const missed = visible.filter((x) => x.d < today && (x.v === null || x.v === undefined || x.v === 0)).length;
@@ -286,32 +288,20 @@ export default function DashboardPage() {
     });
   }, [scheduledTodayHabits, extraHabitsToday, completedIdsToday, HABIT_CAT_ORDER, TODAY_KEY]);
 
-  const TASK_CATEGORY_ORDER = useMemo(
-    () => ["study", "coding", "exam", "gym", "faith", "personal", "work", "other"],
-    []
-  );
-  const taskCatRank = (c: string) => {
-    const i = TASK_CATEGORY_ORDER.indexOf(c);
-    return i === -1 ? 99 : i;
-  };
-
   const sortedTodayTasks = useMemo(() => {
-    const raw = (allTasks || []).filter(
-      (t) => !t.completed && ((t.dueDate && t.dueDate <= today) || !t.dueDate)
-    );
-    const byCatThenDue = (a: Task, b: Task) => {
-      const cx = taskCatRank(a.category) - taskCatRank(b.category);
-      if (cx !== 0) return cx;
+    const priorityRank: Record<Task["priority"], number> = { high: 0, medium: 1, low: 2 };
+    const raw = (allTasks || []).filter((t) => !t.completed);
+    return [...raw].sort((a, b) => {
       const da = a.dueDate ?? "";
       const db = b.dueDate ?? "";
+      if (!da && db) return 1;
+      if (da && !db) return -1;
       if (da !== db) return da.localeCompare(db);
+      const pr = priorityRank[a.priority] - priorityRank[b.priority];
+      if (pr !== 0) return pr;
       return (b.createdAt ?? 0) - (a.createdAt ?? 0);
-    };
-    return [
-      ...raw.filter((t) => !t.completed).sort(byCatThenDue),
-      ...raw.filter((t) => t.completed).sort(byCatThenDue),
-    ];
-  }, [allTasks, today, TASK_CATEGORY_ORDER]);
+    });
+  }, [allTasks]);
 
   const habitRatioLabel =
     scheduledTodayHabits.length > 0
