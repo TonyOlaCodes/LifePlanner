@@ -1,5 +1,5 @@
 import { db, type FoodItem, type MealIngredient, type MealTemplate } from "@/lib/db";
-import { convertAmount, formatFoodQuantity, getUnitKind } from "@/lib/foodUnits";
+import { convertAmount, formatFoodQuantity } from "@/lib/foodUnits";
 
 export type StockStatus = "ok" | "low" | "out";
 
@@ -24,7 +24,12 @@ export function shouldShowOutAlert(item: FoodItem): boolean {
   return item.outOfStockAlert !== false && item.quantity <= 0;
 }
 
+export function isFoodVisible(item: FoodItem): boolean {
+  return item.hidden !== true;
+}
+
 export function isShoppingCandidate(item: FoodItem): boolean {
+  if (!isFoodVisible(item)) return false;
   if (item.pinnedToShoppingList) return true;
   const status = getStockStatus(item);
   return status === "low" || status === "out";
@@ -133,6 +138,9 @@ export async function logMealConsumption(
     const item = await db.foodItems.get(ing.foodItemId);
     if (!item) {
       errors.push(`Missing item for ingredient`);
+      continue;
+    }
+    if (!isFoodVisible(item)) {
       continue;
     }
     const next = subtractFromItem(item, ing.amount, ing.unit);

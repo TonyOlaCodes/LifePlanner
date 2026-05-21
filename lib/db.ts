@@ -143,6 +143,8 @@ export interface FoodItem {
   quickAddAmount?: number;
   quickConsumeAmount?: number;
   pinnedToShoppingList?: boolean;
+  /** Hidden foods stay saved but are left out of visible food and shopping views. */
+  hidden?: boolean;
   createdAt: number;
   updatedAt: number;
 }

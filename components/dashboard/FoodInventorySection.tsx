@@ -9,6 +9,7 @@ import {
   getStockProgress,
   getStockStatus,
   ingredientsFromTemplate,
+  isFoodVisible,
   isShoppingCandidate,
   logMealConsumption,
   shouldShowOutAlert,
@@ -35,6 +36,8 @@ import {
   Pencil,
   ChevronDown,
   ChevronUp,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 type SheetTab = "inventory" | "meals" | "shopping";
@@ -63,15 +66,16 @@ export default function FoodInventorySection() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [tab, setTab] = useState<SheetTab>("inventory");
 
-  const lowCount = useMemo(() => (items || []).filter((i) => getStockStatus(i) === "low").length, [items]);
+  const visibleItems = useMemo(() => (items || []).filter(isFoodVisible), [items]);
+  const lowCount = useMemo(() => visibleItems.filter((i) => getStockStatus(i) === "low").length, [visibleItems]);
   const outCount = useMemo(
-    () => (items || []).filter((i) => shouldShowOutAlert(i) || getStockStatus(i) === "out").length,
-    [items],
+    () => visibleItems.filter((i) => shouldShowOutAlert(i) || getStockStatus(i) === "out").length,
+    [visibleItems],
   );
-  const shoppingItems = useMemo(() => (items || []).filter(isShoppingCandidate), [items]);
+  const shoppingItems = useMemo(() => visibleItems.filter(isShoppingCandidate), [visibleItems]);
   const sortedItems = useMemo(
-    () => [...(items || [])].sort((a, b) => stockRatio(a) - stockRatio(b) || a.name.localeCompare(b.name)),
-    [items],
+    () => [...visibleItems].sort(foodRotationSort),
+    [visibleItems],
   );
 
   function openSheet(nextTab: SheetTab = "inventory") {
@@ -126,7 +130,7 @@ export default function FoodInventorySection() {
           </div>
         )}
 
-        {(!items || items.length === 0) ? (
+        {visibleItems.length === 0 ? (
           <div
             style={{
               padding: 20,
@@ -138,7 +142,9 @@ export default function FoodInventorySection() {
           >
             <div style={{ fontSize: 36, marginBottom: 8 }}>🥗</div>
             <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-secondary)" }}>
-              Track what is in your pantry and log meals to auto-deduct stock.
+              {items && items.length > 0
+                ? "No foods are in rotation right now. Manage inventory to bring hidden foods back."
+                : "Track what is in your pantry and log meals to auto-deduct stock."}
             </p>
             <button
               type="button"
@@ -155,7 +161,7 @@ export default function FoodInventorySection() {
                 cursor: "pointer",
               }}
             >
-              Add your first item
+              {items && items.length > 0 ? "Manage hidden foods" : "Add your first item"}
             </button>
           </div>
         ) : (
@@ -163,7 +169,7 @@ export default function FoodInventorySection() {
             {sortedItems.slice(0, 12).map((item) => (
               <FoodCompactCard key={item.id} item={item} onOpen={() => openSheet("inventory")} />
             ))}
-            {items.length > 12 && (
+            {visibleItems.length > 12 && (
               <button
                 type="button"
                 onClick={() => openSheet("inventory")}
@@ -179,7 +185,7 @@ export default function FoodInventorySection() {
                   cursor: "pointer",
                 }}
               >
-                +{items.length - 12} more
+                +{visibleItems.length - 12} more
               </button>
             )}
           </div>
@@ -202,7 +208,7 @@ export default function FoodInventorySection() {
         {tab === "meals" && (
           <MealsTab items={items || []} templates={templates || []} today={today} />
         )}
-        {tab === "shopping" && <ShoppingTab items={items || []} />}
+        {tab === "shopping" && <ShoppingTab items={visibleItems} />}
       </BottomSheet>
     </>
   );
@@ -281,17 +287,21 @@ function FoodItemRow({
   compact,
   onOpen,
   onEdit,
+  onToggleHidden,
   editActive,
 }: {
   item: FoodItem;
   compact?: boolean;
   onOpen?: () => void;
   onEdit?: () => void;
+  onToggleHidden?: () => void;
   editActive?: boolean;
 }) {
   const status = getStockStatus(item);
   const progress = getStockProgress(item);
   const barColor = stockColor(item);
+  const hidden = !isFoodVisible(item);
+  const fillAmount = Math.max(0, getParLevel(item) - item.quantity);
 
   async function quick(delta: "add" | "subtract") {
     vibrate(30);
@@ -303,6 +313,12 @@ function FoodItemRow({
     await applyIngredientDelta(item.id, amt, item.unit, delta === "add" ? "add" : "subtract");
   }
 
+  async function fillToFull() {
+    if (fillAmount <= 0) return;
+    vibrate(40);
+    await applyIngredientDelta(item.id, fillAmount, item.unit, "add");
+  }
+
   return (
     <div
       style={{
@@ -310,6 +326,7 @@ function FoodItemRow({
         borderRadius: 16,
         background: "var(--surface-2)",
         border: `1px solid ${status === "out" ? "#EF444440" : status === "low" ? "#F59E0B40" : "var(--border)"}`,
+        opacity: hidden ? 0.62 : 1,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -323,12 +340,20 @@ function FoodItemRow({
             {status === "out" && (
               <span style={{ fontSize: 9, fontWeight: 800, color: "#EF4444", textTransform: "uppercase" }}>Out</span>
             )}
+            {hidden && (
+              <span style={{ fontSize: 9, fontWeight: 800, color: "var(--text-tertiary)", textTransform: "uppercase" }}>Hidden</span>
+            )}
           </div>
           <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>
             {stockAmountLabel(item)}
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          {onToggleHidden && (
+            <IconBtn onClick={onToggleHidden} label={hidden ? "Show in rotation" : "Hide from rotation"} active={hidden}>
+              {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+            </IconBtn>
+          )}
           {onEdit && (
             <IconBtn onClick={onEdit} label="Edit item" active={editActive}>
               <Pencil size={14} />
@@ -336,6 +361,9 @@ function FoodItemRow({
           )}
           <IconBtn onClick={() => void quick("subtract")} label="Consume">
             <Minus size={14} />
+          </IconBtn>
+          <IconBtn onClick={() => void fillToFull()} label="Fill to full" disabled={fillAmount <= 0}>
+            <Package size={14} />
           </IconBtn>
           <IconBtn onClick={() => void quick("add")} label="Add">
             <Plus size={14} />
@@ -382,6 +410,13 @@ function stockRatio(item: FoodItem): number {
 
 function stockAmountLabel(item: FoodItem): string {
   return `${formatFoodQuantity(item.quantity, item.unit)} / ${formatFoodQuantity(getParLevel(item), item.unit)}`;
+}
+
+function foodRotationSort(a: FoodItem, b: FoodItem): number {
+  const aOut = getStockStatus(a) === "out";
+  const bOut = getStockStatus(b) === "out";
+  if (aOut !== bOut) return aOut ? 1 : -1;
+  return a.name.localeCompare(b.name);
 }
 
 function stockColor(item: FoodItem): string {
@@ -438,18 +473,22 @@ function IconBtn({
   onClick,
   label,
   active,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   label: string;
   active?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      title={label}
       className="tap-scale"
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         width: 32,
         height: 32,
@@ -460,7 +499,8 @@ function IconBtn({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.38 : 1,
       }}
     >
       {children}
@@ -470,21 +510,40 @@ function IconBtn({
 
 function InventoryTab({ items }: { items: FoodItem[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const visibleItems = useMemo(
+    () => [...items].filter(isFoodVisible).sort(foodRotationSort),
+    [items],
+  );
+  const hiddenItems = useMemo(
+    () => [...items].filter((item) => !isFoodVisible(item)).sort((a, b) => a.name.localeCompare(b.name)),
+    [items],
+  );
+
+  async function toggleHidden(item: FoodItem) {
+    const hidden = isFoodVisible(item);
+    vibrate(20);
+    await db.foodItems.update(item.id, {
+      hidden,
+      pinnedToShoppingList: hidden ? false : item.pinnedToShoppingList,
+      updatedAt: new Date().getTime(),
+    });
+  }
 
   return (
     <div>
       <AddFoodForm onSaved={() => setEditingId(null)} />
-      {items.length > 0 && (
+      {visibleItems.length > 0 && (
         <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.6, margin: "20px 0 10px" }}>
-          In stock ({items.length})
+          In rotation ({visibleItems.length})
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto" }}>
-        {[...items].sort((a, b) => stockRatio(a) - stockRatio(b) || a.name.localeCompare(b.name)).map((item) => (
+        {visibleItems.map((item) => (
           <div key={item.id}>
             <FoodItemRow
               item={item}
               editActive={editingId === item.id}
+              onToggleHidden={() => void toggleHidden(item)}
               onEdit={() => {
                 vibrate(20);
                 setEditingId(editingId === item.id ? null : item.id);
@@ -496,6 +555,31 @@ function InventoryTab({ items }: { items: FoodItem[] }) {
           </div>
         ))}
       </div>
+      {hiddenItems.length > 0 && (
+        <>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.6, margin: "20px 0 10px" }}>
+            Hidden ({hiddenItems.length})
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {hiddenItems.map((item) => (
+              <div key={item.id}>
+                <FoodItemRow
+                  item={item}
+                  editActive={editingId === item.id}
+                  onToggleHidden={() => void toggleHidden(item)}
+                  onEdit={() => {
+                    vibrate(20);
+                    setEditingId(editingId === item.id ? null : item.id);
+                  }}
+                />
+                {editingId === item.id && (
+                  <EditFoodForm item={item} onDone={() => setEditingId(null)} onDelete={() => setEditingId(null)} />
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -664,6 +748,7 @@ function EditFoodForm({
   const [quickAdd, setQuickAdd] = useState(item.quickAddAmount != null ? String(item.quickAddAmount) : "");
   const [quickUse, setQuickUse] = useState(item.quickConsumeAmount != null ? String(item.quickConsumeAmount) : "");
   const [outAlert, setOutAlert] = useState(item.outOfStockAlert !== false);
+  const [hidden, setHidden] = useState(item.hidden === true);
   const packSize = parseFloat(par);
   const packs = parseFloat(packCount);
   const computedQuantity = Number.isFinite(packSize) && Number.isFinite(packs) ? packSize * packs : NaN;
@@ -681,6 +766,8 @@ function EditFoodForm({
       quickAddAmount: quickAdd ? parseFloat(quickAdd) : undefined,
       quickConsumeAmount: quickUse ? parseFloat(quickUse) : undefined,
       outOfStockAlert: outAlert,
+      hidden,
+      pinnedToShoppingList: hidden ? false : item.pinnedToShoppingList,
       updatedAt: Date.now(),
     });
     vibrate(30);
@@ -738,6 +825,13 @@ function EditFoodForm({
         <input type="checkbox" checked={outAlert} onChange={(e) => setOutAlert(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
         Alert when out of stock
       </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12, cursor: "pointer" }}>
+        <input type="checkbox" checked={!hidden} onChange={(e) => setHidden(!e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+          Show in food rotation
+        </span>
+      </label>
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" className="tap-scale" onClick={() => void save()} style={{ ...primaryBtn, flex: 2 }}>
           Save
@@ -782,6 +876,7 @@ function MealsTab({
   const [tplEmoji, setTplEmoji] = useState("🍽️");
   const [tplIngredients, setTplIngredients] = useState<MealIngredient[]>([]);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const visibleItems = useMemo(() => items.filter(isFoodVisible).sort(foodRotationSort), [items]);
 
   async function logMeal(ings: MealIngredient[], name: string) {
     setMsg(null);
@@ -793,6 +888,10 @@ function MealsTab({
       setMsg({ type: "err", text: "Add at least one ingredient" });
       return;
     }
+    const skippedCount = ings.filter((ing) => {
+      const food = items.find((f) => f.id === ing.foodItemId);
+      return food && !isFoodVisible(food);
+    }).length;
     const res = await logMealConsumption(name.trim(), ings, today);
     if (!res.ok) {
       setMsg({ type: "err", text: res.errors.join(" · ") });
@@ -800,7 +899,10 @@ function MealsTab({
       return;
     }
     vibrate(50);
-    setMsg({ type: "ok", text: "Meal logged — inventory updated" });
+    setMsg({
+      type: "ok",
+      text: skippedCount > 0 ? "Meal logged - hidden foods skipped" : "Meal logged - inventory updated",
+    });
     setMealName("");
     setIngredients([]);
     setMode("templates");
@@ -970,7 +1072,8 @@ function MealsTab({
 
       {mode === "log" && (
         <MealBuilder
-          items={items}
+          items={visibleItems}
+          ingredientItems={items}
           mealName={mealName}
           setMealName={setMealName}
           ingredients={ingredients}
@@ -986,7 +1089,8 @@ function MealsTab({
             <input className="lock-input" placeholder="Template name (e.g. Cereal bowl)" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ flex: 1 }} />
           </div>
           <MealBuilder
-            items={items}
+            items={visibleItems}
+            ingredientItems={items}
             mealName=""
             setMealName={() => {}}
             ingredients={tplIngredients}
@@ -1006,7 +1110,8 @@ function MealsTab({
             <input className="lock-input" placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ flex: 1 }} />
           </div>
           <MealBuilder
-            items={items}
+            items={visibleItems}
+            ingredientItems={items}
             mealName=""
             setMealName={() => {}}
             ingredients={tplIngredients}
@@ -1024,6 +1129,7 @@ function MealsTab({
 
 function MealBuilder({
   items,
+  ingredientItems = items,
   mealName,
   setMealName,
   ingredients,
@@ -1032,6 +1138,7 @@ function MealBuilder({
   hideName,
 }: {
   items: FoodItem[];
+  ingredientItems?: FoodItem[];
   mealName: string;
   setMealName: (v: string) => void;
   ingredients: MealIngredient[];
@@ -1065,7 +1172,8 @@ function MealBuilder({
       {ingredients.length > 0 && (
         <ul style={{ margin: "0 0 12px", padding: 0, listStyle: "none" }}>
           {ingredients.map((ing, idx) => {
-            const food = items.find((f) => f.id === ing.foodItemId);
+            const food = ingredientItems.find((f) => f.id === ing.foodItemId);
+            const hidden = food && !isFoodVisible(food);
             return (
               <li
                 key={idx}
@@ -1081,7 +1189,8 @@ function MealBuilder({
                 }}
               >
                 <span>
-                  {food?.emoji} {food?.name}: {formatFoodQuantity(ing.amount, ing.unit)}
+                  {food?.emoji} {food?.name || "Unknown"}: {formatFoodQuantity(ing.amount, ing.unit)}
+                  {hidden ? " (hidden)" : ""}
                 </span>
                 <button
                   type="button"
