@@ -235,6 +235,8 @@ export interface AppSettings {
   focusShowDailyBar?: boolean;
   focusShowWeeklyBar?: boolean;
   focusShowMonthlyBar?: boolean;
+  /** When false, Focus completion uses vibration/alert only. */
+  focusAlarmSound?: boolean;
   /** Which quick-log tiles appear on Home (subset of sleep | workout | weight | calories) */
   quickLogKeys?: ("sleep" | "workout" | "weight" | "calories")[];
   habitCategories?: { id: string; label: string; emoji: string; color: string }[];
@@ -338,6 +340,7 @@ export async function initializeSettings(): Promise<AppSettings> {
     focusShowDailyBar: true,
     focusShowWeeklyBar: true,
     focusShowMonthlyBar: true,
+    focusAlarmSound: true,
     quickLogKeys: ["sleep", "workout", "weight", "calories"],
     bootstrapPackApplied: false,
     accountStartDate: today,

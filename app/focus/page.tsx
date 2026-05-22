@@ -25,6 +25,7 @@ export default function FocusPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSecondsRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<AudioContext | null>(null);
 
   const today = getTodayString();
 
@@ -61,6 +62,42 @@ export default function FocusPage() {
     }
   };
 
+  const ensureAlarmAudio = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    try {
+      const ctx = audioRef.current ?? new AudioContextClass();
+      audioRef.current = ctx;
+      if (ctx.state === "suspended") await ctx.resume();
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playCompletionAlarm = useCallback(async () => {
+    if (settings?.focusAlarmSound === false) return;
+    await ensureAlarmAudio();
+    const ctx = audioRef.current;
+    if (!ctx) return;
+    const start = ctx.currentTime + 0.03;
+    const notes = [880, 1175, 988, 1175, 880, 1175];
+    notes.forEach((freq, i) => {
+      const t = start + i * 0.22;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+  }, [ensureAlarmAudio, settings?.focusAlarmSound]);
+
   const startFocus = async () => {
     vibrate(50);
     const mins = parseInt(durationStr, 10);
@@ -72,6 +109,7 @@ export default function FocusPage() {
     setIsActive(true);
     setFailed(false);
     setShowAbandon(false);
+    await ensureAlarmAudio();
     await requestWakeLock();
   };
 
@@ -85,6 +123,17 @@ export default function FocusPage() {
     setTotalSessionSecs(0);
     void releaseWakeLock();
   };
+
+  const completeFocus = useCallback(() => {
+    void flushPendingSeconds();
+    vibrate([50, 100, 50, 100, 50, 100]);
+    void playCompletionAlarm();
+    setIsActive(false);
+    if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+    flushTimerRef.current = null;
+    void releaseWakeLock();
+    alert("Focus session complete! Great job.");
+  }, [flushPendingSeconds, playCompletionAlarm]);
 
   const addFiveMinutes = () => {
     vibrate(30);
@@ -111,23 +160,21 @@ export default function FocusPage() {
   useEffect(() => {
     if (isActive && timeLeft > 0) {
       timerRef.current = setTimeout(() => {
-        setTimeLeft((t) => t - 1);
-        pendingSecondsRef.current += 1;
+        setTimeLeft((t) => {
+          pendingSecondsRef.current += 1;
+          if (t <= 1) {
+            completeFocus();
+            return 0;
+          }
+          return t - 1;
+        });
       }, 1000);
-    } else if (isActive && timeLeft === 0) {
-      void flushPendingSeconds();
-      vibrate([50, 100, 50, 100, 50, 100]);
-      setIsActive(false);
-      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
-      flushTimerRef.current = null;
-      void releaseWakeLock();
-      alert("Focus session complete! Great job.");
     }
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isActive, timeLeft, flushPendingSeconds]);
+  }, [isActive, timeLeft, completeFocus]);
 
   useEffect(() => {
     if (isActive) {

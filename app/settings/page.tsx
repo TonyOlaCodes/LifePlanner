@@ -2,11 +2,11 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, useEffect } from "react";
-import { db, initializeSettings, type JournalSecuritySnapshot } from "@/lib/db";
+import { db, initializeSettings, type AppSettings, type JournalSecuritySnapshot } from "@/lib/db";
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { hashJournalPassword, verifyJournalPassword } from "@/lib/journalAuth";
-import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid } from "lucide-react";
+import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid, Volume2, BellRing } from "lucide-react";
 
 const CLEAR_CONFIRM_PHRASE = "CLEAR ALL DATA";
 
@@ -64,22 +64,39 @@ export default function SettingsPage() {
   const [focusShowDaily, setFocusShowDaily] = useState(true);
   const [focusShowWeekly, setFocusShowWeekly] = useState(true);
   const [focusShowMonthly, setFocusShowMonthly] = useState(true);
+  const [focusAlarmSound, setFocusAlarmSound] = useState(true);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("20:30");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
 
   useEffect(() => {
     if (!settings) return;
-    setFocusDaily(String(settings.focusGoalDailyMinutes ?? 60));
-    setFocusWeekly(String(settings.focusGoalWeeklyMinutes ?? 360));
-    setFocusMonthly(String(settings.focusGoalMonthlyMinutes ?? 1400));
-    setFocusShowDaily(settings.focusShowDailyBar !== false);
-    setFocusShowWeekly(settings.focusShowWeeklyBar !== false);
-    setFocusShowMonthly(settings.focusShowMonthlyBar !== false);
+    const id = window.setTimeout(() => {
+      setFocusDaily(String(settings.focusGoalDailyMinutes ?? 60));
+      setFocusWeekly(String(settings.focusGoalWeeklyMinutes ?? 360));
+      setFocusMonthly(String(settings.focusGoalMonthlyMinutes ?? 1400));
+      setFocusShowDaily(settings.focusShowDailyBar !== false);
+      setFocusShowWeekly(settings.focusShowWeeklyBar !== false);
+      setFocusShowMonthly(settings.focusShowMonthlyBar !== false);
+      setFocusAlarmSound(settings.focusAlarmSound !== false);
+      setReminderEnabled(settings.notificationsEnabled === true);
+      setReminderTime(settings.reminderTime || "20:30");
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [settings]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setNotificationPermission(typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported");
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   if (!settings) return <div style={{ padding:40, textAlign:"center", color:"var(--text-secondary)" }}>Loading…</div>;
 
-  async function update(patch: Partial<typeof settings>) {
+  async function update(patch: Partial<Omit<AppSettings, "id">>) {
     vibrate(30);
-    await db.settings.update(1, patch as any);
+    await db.settings.update(1, patch);
   }
 
   async function saveJournalLock() {
@@ -170,6 +187,19 @@ export default function SettingsPage() {
     void update({ quickLogKeys: [...set] as ("sleep" | "workout" | "weight" | "calories")[] });
   }
 
+  async function toggleDailyReminder(enabled: boolean) {
+    if (enabled && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      setNotificationPermission(await Notification.requestPermission());
+    }
+    setReminderEnabled(enabled);
+    await update({ notificationsEnabled: enabled, reminderTime });
+  }
+
+  async function saveReminderTime(nextTime = reminderTime) {
+    setReminderTime(nextTime);
+    await update({ reminderTime: nextTime, notificationsEnabled: reminderEnabled });
+  }
+
   async function saveFocusGoals() {
     vibrate(30);
     const d = Math.max(1, parseInt(focusDaily, 10) || 60);
@@ -182,8 +212,9 @@ export default function SettingsPage() {
       focusShowDailyBar: focusShowDaily,
       focusShowWeeklyBar: focusShowWeekly,
       focusShowMonthlyBar: focusShowMonthly,
+      focusAlarmSound,
     });
-    setJournalNote({ type: "ok", text: "Focus goals saved." });
+    setJournalNote({ type: "ok", text: "Focus settings saved." });
     setTimeout(() => setJournalNote(null), 2500);
   }
 
@@ -260,10 +291,10 @@ export default function SettingsPage() {
 
       {/* Profile */}
       <Section title="Profile" icon={<User size={15}/>}>
-        <p style={{ fontSize:13, color:"var(--text-secondary)", marginBottom:8 }}>Name — showing as "{settings.userName}"</p>
+        <p style={{ fontSize:13, color:"var(--text-secondary)", marginBottom:8 }}>Name - showing as “{settings.userName}”</p>
         <div style={{ display:"flex", gap:8 }}>
           <input type="text" className="lock-input" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} style={{ flex:1 }} />
-          <button className="tap-scale" onClick={saveName} style={{ padding:"14px 18px", borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:"pointer" }}>Save</button>
+          <button className="tap-scale" onClick={saveName} disabled={saving} style={{ padding:"14px 18px", borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:saving ? "not-allowed" : "pointer", opacity: saving ? 0.65 : 1 }}>{saving ? "Saving" : "Save"}</button>
         </div>
       </Section>
 
@@ -283,6 +314,43 @@ export default function SettingsPage() {
             <input type="text" className="lock-input" value={settings.accentColor} onChange={e=>update({accentColor:e.target.value})} style={{ flex:1, fontFamily:"monospace" }} />
           </div>
         </div>
+      </Section>
+
+      <Section title="Daily reminder" icon={<BellRing size={15} />}>
+        <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, cursor: "pointer", marginBottom: 14 }}>
+          <span>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>
+              Nudge me to log
+            </span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+              One reminder per day if habits, sleep, workout, weight, calories, or tasks are still open.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={reminderEnabled}
+            onChange={(e) => void toggleDailyReminder(e.target.checked)}
+            style={{ width: 22, height: 22, accentColor: "var(--accent)", flexShrink: 0 }}
+          />
+        </label>
+        <label style={{ fontSize: 12, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Reminder time</label>
+        <input
+          type="time"
+          className="lock-input"
+          value={reminderTime}
+          onChange={(e) => void saveReminderTime(e.target.value)}
+          style={{ maxWidth: 160 }}
+        />
+        {notificationPermission === "denied" && (
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: "#F87171", lineHeight: 1.45 }}>
+            Browser notifications are blocked. Enable them in browser settings to receive reminders.
+          </p>
+        )}
+        {notificationPermission === "unsupported" && (
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.45 }}>
+            This browser does not support reminder notifications.
+          </p>
+        )}
       </Section>
 
       {/* Focus goals */}
@@ -317,6 +385,28 @@ export default function SettingsPage() {
             Save
           </button>
         </div>
+      </Section>
+
+      <Section title="Focus alarm" icon={<Volume2 size={15} />}>
+        <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, cursor: "pointer" }}>
+          <span>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>
+              Ring when timer finishes
+            </span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+              Turn this off for silent mode. Vibration and the completion alert still happen.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={focusAlarmSound}
+            onChange={(e) => {
+              setFocusAlarmSound(e.target.checked);
+              void update({ focusAlarmSound: e.target.checked });
+            }}
+            style={{ width: 22, height: 22, accentColor: "var(--accent)", flexShrink: 0 }}
+          />
+        </label>
       </Section>
 
       {/* Security — journal lock */}
@@ -548,8 +638,11 @@ function SnapshotThumb({ snap }: { snap: JournalSecuritySnapshot }) {
 
   useEffect(() => {
     const objectUrl = URL.createObjectURL(snap.imageBlob);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    const id = window.setTimeout(() => setUrl(objectUrl), 0);
+    return () => {
+      window.clearTimeout(id);
+      URL.revokeObjectURL(objectUrl);
+    };
   }, [snap.id, snap.imageBlob]);
 
   const when = new Date(snap.createdAt).toLocaleString(undefined, {

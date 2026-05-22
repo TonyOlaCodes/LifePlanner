@@ -8,7 +8,7 @@ import ProgressRing from "@/components/ui/ProgressRing";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { MiniTrendChart, type MiniTrendPoint } from "@/components/dashboard/MiniTrendChart";
 import FoodInventorySection from "@/components/dashboard/FoodInventorySection";
-import { Plus, Moon, CheckCircle2, Circle, Scale, Flame, Dumbbell } from "lucide-react";
+import { Moon, CheckCircle2, Circle, BellRing, ChevronRight } from "lucide-react";
 import { format, subDays } from "date-fns";
 
 const METRIC_WINDOW = 28;
@@ -172,7 +172,8 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    setSheetTab("log");
+    const id = window.setTimeout(() => setSheetTab("log"), 0);
+    return () => window.clearTimeout(id);
   }, [quickSheet]);
 
   useEffect(() => {
@@ -186,16 +187,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (quickSheet !== "sleep") return;
-    if (sleepRowForDate) setSleepForm({ bedtime: sleepRowForDate.bedtime, wakeTime: sleepRowForDate.wakeTime });
-    else setSleepForm({ bedtime: "23:00", wakeTime: "07:00" });
-  }, [quickSheet, sleepFormDate, sleepRowForDate?.id]);
+    const id = window.setTimeout(() => {
+      if (sleepRowForDate) setSleepForm({ bedtime: sleepRowForDate.bedtime, wakeTime: sleepRowForDate.wakeTime });
+      else setSleepForm({ bedtime: "23:00", wakeTime: "07:00" });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [quickSheet, sleepFormDate, sleepRowForDate]);
 
   useEffect(() => {
     if (quickSheet !== "weight" && quickSheet !== "calories") return;
     const row = quickSheet === "weight" ? weightEntryForDate : caloriesEntryForDate;
-    if (row) setMetricForm({ value: quickSheet === "weight" ? row.value.toFixed(2) : String(row.value) });
-    else setMetricForm({ value: "" });
-  }, [quickSheet, metricFormDate, weightEntryForDate?.id, caloriesEntryForDate?.id]);
+    const id = window.setTimeout(() => {
+      if (row) setMetricForm({ value: quickSheet === "weight" ? row.value.toFixed(2) : String(row.value) });
+      else setMetricForm({ value: "" });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [quickSheet, metricFormDate, weightEntryForDate, caloriesEntryForDate]);
 
   const accountStart = settings?.accountStartDate;
 
@@ -316,6 +323,75 @@ export default function DashboardPage() {
   const quote = getRotatingQuote();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const scheduledCompletedCount = useMemo(
+    () => scheduledTodayHabits.filter((h) => completedIdsToday.has(h.id)).length,
+    [scheduledTodayHabits, completedIdsToday],
+  );
+  const remainingHabitCount = Math.max(0, scheduledTodayHabits.length - scheduledCompletedCount);
+  const checkInItems = useMemo(() => {
+    const rows: { key: string; title: string; detail: string; action: string; onClick?: () => void; tone: string }[] = [];
+    if (remainingHabitCount > 0) {
+      rows.push({
+        key: "habits",
+        title: `${remainingHabitCount} habit${remainingHabitCount === 1 ? "" : "s"} left`,
+        detail: "Keep the streak alive before the day gets loud.",
+        action: "Review",
+        tone: "var(--accent)",
+      });
+    }
+    if (!sleepLog) {
+      rows.push({
+        key: "sleep",
+        title: "Sleep not logged",
+        detail: "Quickly save bedtime and wake time.",
+        action: "Log sleep",
+        onClick: () => setQuickSheet("sleep"),
+        tone: "#6366F1",
+      });
+    }
+    if (!hasWorkoutToday) {
+      rows.push({
+        key: "workout",
+        title: "Workout not logged",
+        detail: "Even a short session counts.",
+        action: "Log workout",
+        onClick: () => setQuickSheet("workout"),
+        tone: "#EF4444",
+      });
+    }
+    if (!hasWeightToday) {
+      rows.push({
+        key: "weight",
+        title: "Weight not logged",
+        detail: "One number keeps the trend honest.",
+        action: "Log weight",
+        onClick: () => setQuickSheet("weight"),
+        tone: "#F59E0B",
+      });
+    }
+    if (!hasCaloriesToday) {
+      rows.push({
+        key: "calories",
+        title: "Calories not logged",
+        detail: "A rough entry beats a blank day.",
+        action: "Log calories",
+        onClick: () => setQuickSheet("calories"),
+        tone: "#F97316",
+      });
+    }
+    if (sortedTodayTasks.length > 0) {
+      rows.push({
+        key: "tasks",
+        title: `${sortedTodayTasks.length} task${sortedTodayTasks.length === 1 ? "" : "s"} open`,
+        detail: "Pick the next smallest useful move.",
+        action: "Add task",
+        onClick: () => setQuickSheet("task"),
+        tone: "#A78BFA",
+      });
+    }
+    return rows;
+  }, [remainingHabitCount, sleepLog, hasWorkoutToday, hasWeightToday, hasCaloriesToday, sortedTodayTasks.length]);
+  const checkInDone = checkInItems.length === 0;
 
   async function toggleHabit(habitId: string) {
     vibrate(40);
@@ -323,7 +399,7 @@ export default function DashboardPage() {
     if (existing) {
       await db.habitLogs.update(existing.id, { completed: !existing.completed });
     } else {
-      await db.habitLogs.put({ id: crypto.randomUUID(), habitId, date: today, completed: true, timestamp: Date.now() });
+      await db.habitLogs.put({ id: crypto.randomUUID(), habitId, date: today, completed: true, timestamp: new Date().getTime() });
     }
   }
 
@@ -384,7 +460,7 @@ export default function DashboardPage() {
       completed: false,
       priority: taskForm.priority,
       dueDate: taskForm.noDueDate ? undefined : taskForm.dueDate,
-      createdAt: Date.now(),
+      createdAt: new Date().getTime(),
     });
     setQuickSheet(null);
     setTaskForm({ title: "", description: "", category: "study", priority: "medium", dueDate: today, noDueDate: true });
@@ -406,7 +482,7 @@ export default function DashboardPage() {
 
       {/* Quote */}
       <div className="glass" style={{ borderRadius: 16, padding: "14px 16px", marginBottom: 20, borderLeft: "3px solid var(--accent)" }}>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0, fontStyle: "italic" }}>"{quote}"</p>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0, fontStyle: "italic" }}>“{quote}”</p>
       </div>
 
       {/* Score Card */}
@@ -425,6 +501,86 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <section style={{ marginBottom: 16 }}>
+        <div
+          className="glass"
+          style={{
+            borderRadius: 20,
+            padding: 16,
+            border: `1px solid ${checkInDone ? "rgba(34,197,94,0.32)" : "var(--border)"}`,
+            background: checkInDone ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.035)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: checkInDone ? 0 : 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: checkInDone ? "rgba(34,197,94,0.22)" : "var(--accent)18",
+                  color: checkInDone ? "#4ADE80" : "var(--accent)",
+                }}
+              >
+                {checkInDone ? <CheckCircle2 size={18} /> : <BellRing size={18} />}
+              </span>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>
+                  {checkInDone ? "Daily check-in complete" : "Today's check-in"}
+                </h2>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "3px 0 0", lineHeight: 1.4 }}>
+                  {checkInDone ? "Clean day. Keep the standard tomorrow." : "The app remembers the boring stuff for you."}
+                </p>
+              </div>
+            </div>
+            {!checkInDone && (
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)" }}>{checkInItems.length}</span>
+            )}
+          </div>
+          {!checkInDone && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {checkInItems.slice(0, 4).map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className="tap-scale"
+                  onClick={item.onClick}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "11px 12px",
+                    borderRadius: 14,
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                    cursor: item.onClick ? "pointer" : "default",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: 99, background: item.tone, flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 800 }}>{item.title}</span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>{item.detail}</span>
+                  </span>
+                  {item.onClick && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 3, color: item.tone, fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                      {item.action}
+                      <ChevronRight size={14} />
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Quick Actions — order follows Settings → Home quick log */}
       <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
