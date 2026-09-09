@@ -6,22 +6,9 @@ import { db, initializeSettings, type AppSettings, type JournalSecuritySnapshot 
 import { vibrate } from "@/lib/utils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { hashJournalPassword, verifyJournalPassword } from "@/lib/journalAuth";
-import { Download, Upload, Trash2, Palette, User, Target, Lock, LayoutGrid, Volume2, BellRing } from "lucide-react";
+import { Download, Upload, Trash2, User, Target, Lock, LayoutGrid, Volume2, BellRing } from "lucide-react";
 
 const CLEAR_CONFIRM_PHRASE = "CLEAR ALL DATA";
-
-const ACCENT_PRESETS = [
-  { name:"Emerald", value:"#6EE7B7" },
-  { name:"Cyan",    value:"#22D3EE" },
-  { name:"Purple",  value:"#A78BFA" },
-  { name:"Pink",    value:"#F472B6" },
-  { name:"Orange",  value:"#FB923C" },
-  { name:"Gold",    value:"#FBBF24" },
-  { name:"Red",     value:"#F87171" },
-  { name:"Blue",    value:"#60A5FA" },
-  { name:"Lime",    value:"#A3E635" },
-  { name:"White",   value:"#E4E4E7" },
-];
 
 const FORGOT_JOURNAL_PHRASE = "RESET MY JOURNAL LOCK";
 const CLEAR_GROUPS = [
@@ -295,24 +282,6 @@ export default function SettingsPage() {
         <div style={{ display:"flex", gap:8 }}>
           <input type="text" className="lock-input" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} style={{ flex:1 }} />
           <button className="tap-scale" onClick={saveName} disabled={saving} style={{ padding:"14px 18px", borderRadius:14, background:"var(--accent)", border:"none", color:"#000", fontWeight:700, fontSize:14, cursor:saving ? "not-allowed" : "pointer", opacity: saving ? 0.65 : 1 }}>{saving ? "Saving" : "Save"}</button>
-        </div>
-      </Section>
-
-      {/* Accent Color */}
-      <Section title="Accent Color" icon={<Palette size={15}/>}>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
-          {ACCENT_PRESETS.map(p => (
-            <button key={p.value} onClick={()=>update({accentColor:p.value})} title={p.name}
-              style={{ width:36, height:36, borderRadius:"50%", background:p.value, border:`3px solid ${settings.accentColor===p.value?"white":"transparent"}`, cursor:"pointer", transition:"border 0.15s ease", boxShadow:settings.accentColor===p.value?`0 0 12px ${p.value}80`:"none" }} />
-          ))}
-        </div>
-        <div style={{ marginTop:14 }}>
-          <label style={{ fontSize:13, color:"var(--text-secondary)", display:"block", marginBottom:8 }}>Custom hex color</label>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <input type="color" value={settings.accentColor} onChange={e=>update({accentColor:e.target.value})}
-              style={{ width:48, height:44, borderRadius:12, border:"1px solid var(--border)", background:"none", cursor:"pointer", padding:2 }} />
-            <input type="text" className="lock-input" value={settings.accentColor} onChange={e=>update({accentColor:e.target.value})} style={{ flex:1, fontFamily:"monospace" }} />
-          </div>
         </div>
       </Section>
 

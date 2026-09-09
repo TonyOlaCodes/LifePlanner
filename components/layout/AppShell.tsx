@@ -23,8 +23,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!settings) return;
     setSettings(settings);
-    document.documentElement.style.setProperty("--accent", settings.accentColor);
-    document.documentElement.style.setProperty("--accent-secondary", settings.accentColorSecondary);
+    // Accent is fixed green — ignore any stored color overrides
+    document.documentElement.style.setProperty("--accent", "#6EE7B7");
+    document.documentElement.style.setProperty("--accent-secondary", "#34D399");
     document.documentElement.style.setProperty("--bg", "#000000");
     document.documentElement.style.setProperty("--surface", "#0A0A0A");
   }, [settings, setSettings]);

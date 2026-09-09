@@ -32,7 +32,7 @@ export async function GET(
             width: inner,
             height: inner,
             borderRadius: Math.round(size * 0.18),
-            background: "linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%)",
+            background: "linear-gradient(135deg, #6EE7B7 0%, #34D399 100%)",
             fontSize,
             fontWeight: 800,
             color: "#000",

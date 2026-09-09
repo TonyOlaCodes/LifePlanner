@@ -316,17 +316,23 @@ export async function initializeSettings(): Promise<AppSettings> {
   const existing = await db.settings.get(1);
   const today = getTodayString();
   if (existing) {
+    const accentPatch: Partial<AppSettings> = {};
+    if (existing.accentColor !== "#6EE7B7") accentPatch.accentColor = "#6EE7B7";
+    if (existing.accentColorSecondary !== "#34D399") accentPatch.accentColorSecondary = "#34D399";
     if (!existing.accountStartDate) {
       const inferred = await inferEarliestActivityDate();
-      await db.settings.update(1, { accountStartDate: inferred });
-      return { ...existing, accountStartDate: inferred };
+      accentPatch.accountStartDate = inferred;
+    }
+    if (Object.keys(accentPatch).length) {
+      await db.settings.update(1, accentPatch);
+      return { ...existing, ...accentPatch };
     }
     return existing;
   }
   const defaults: AppSettings = {
     id: 1,
     accentColor: "#6EE7B7",
-    accentColorSecondary: "#3B82F6",
+    accentColorSecondary: "#34D399",
     theme: "oled",
     dashboardWidgets: ["score", "habits", "sleep", "gym", "study", "tasks"],
     motivationalQuotes: true,
