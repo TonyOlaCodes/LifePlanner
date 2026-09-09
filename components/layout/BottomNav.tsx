@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import { Home, Flame, CalendarDays, BarChart2, BookOpen, Settings, Target } from "lucide-react";
 
 const TABS = [
-  { href: "/",          icon: Home,         label: "Home" },
-  { href: "/habits",    icon: Flame,        label: "Habits" },
-  { href: "/planner",   icon: CalendarDays, label: "Tasks" },
-  { href: "/focus",     icon: Target,       label: "Focus" },
-  { href: "/journal",   icon: BookOpen,     label: "Journal" },
-  { href: "/settings",  icon: Settings,     label: "Settings" },
+  { href: "/life",          icon: Home,         label: "Home" },
+  { href: "/life/habits",   icon: Flame,        label: "Habits" },
+  { href: "/life/planner",  icon: CalendarDays, label: "Tasks" },
+  { href: "/life/focus",    icon: Target,       label: "Focus" },
+  { href: "/life/journal",  icon: BookOpen,     label: "Journal" },
+  { href: "/life/settings", icon: Settings,     label: "Settings" },
 ];
 
 export default function BottomNav() {
@@ -35,7 +35,7 @@ export default function BottomNav() {
     >
       <div style={{ display: "flex", justifyContent: "space-around", paddingTop: 10, paddingBottom: 10 }}>
         {TABS.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || (href !== "/" && pathname.startsWith(href));
+          const active = pathname === href || (href !== "/life" && pathname.startsWith(href));
           return (
             <Link
               key={href}

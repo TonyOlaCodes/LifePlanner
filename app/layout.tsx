@@ -1,16 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "Lock In",
-  description: "Your premium offline life operating system",
-  applicationName: "Lock In",
+  title: "Studio",
+  description: "Your apps — Life Planner, Transcript, and more",
+  applicationName: "Studio",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Lock In",
+    title: "Studio",
   },
   formatDetection: {
     telephone: false,
@@ -53,9 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

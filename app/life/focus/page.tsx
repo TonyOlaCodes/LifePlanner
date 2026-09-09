@@ -389,7 +389,7 @@ export default function FocusPage() {
         {showGoalMonthly && <GoalBar label="This month" done={monthSecs} goal={goalMonthly} pct={pct(monthSecs, goalMonthly)} />}
         <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
           Change targets and which bars appear in{" "}
-          <Link href="/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          <Link href="/life/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
             Settings
           </Link>
           .
@@ -398,7 +398,7 @@ export default function FocusPage() {
       ) : (
         <div className="glass" style={{ borderRadius: 18, padding: 14, marginBottom: 22, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
           No goal bars enabled. Turn them on under{" "}
-          <Link href="/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          <Link href="/life/settings" style={{ color: "var(--accent)", fontWeight: 700 }}>
             Settings → Focus goals
           </Link>
           .

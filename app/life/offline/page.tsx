@@ -13,7 +13,7 @@ export default function OfflinePage() {
           Lock In keeps working from data on your phone. Reopen the app or try again when you have signal.
         </p>
         <Link
-          href="/"
+          href="/life"
           className="tap-scale"
           style={{
             display: "inline-block",
@@ -26,7 +26,7 @@ export default function OfflinePage() {
             textDecoration: "none",
           }}
         >
-          Open Lock In
+          Open Life Planner
         </Link>
       </div>
     </main>

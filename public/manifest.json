@@ -1,7 +1,7 @@
 {
-  "name": "Lock In",
-  "short_name": "Lock In",
-  "description": "Your premium offline life operating system",
+  "name": "Studio",
+  "short_name": "Studio",
+  "description": "Your apps — Life Planner, Transcript, and more",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -33,21 +33,21 @@
   "categories": ["productivity", "lifestyle", "health"],
   "shortcuts": [
     {
-      "name": "Habits",
-      "short_name": "Habits",
-      "url": "/habits?source=shortcut",
+      "name": "Life Planner",
+      "short_name": "Life",
+      "url": "/life?source=shortcut",
+      "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
+    },
+    {
+      "name": "Transcript",
+      "short_name": "Transcript",
+      "url": "/transcript?source=shortcut",
       "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
     },
     {
       "name": "Focus",
       "short_name": "Focus",
-      "url": "/focus?source=shortcut",
-      "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
-    },
-    {
-      "name": "Journal",
-      "short_name": "Journal",
-      "url": "/journal?source=shortcut",
+      "url": "/life/focus?source=shortcut",
       "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
     }
   ]

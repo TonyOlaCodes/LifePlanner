@@ -10,7 +10,7 @@ const withPwa = withPWA({
   disable: process.env.NODE_ENV === "development",
   runtimeCaching,
   fallbacks: {
-    document: "/offline",
+    document: "/life/offline",
   },
   buildExcludes: [/middleware-manifest\.json$/],
 });
@@ -18,6 +18,15 @@ const withPwa = withPWA({
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  serverExternalPackages: ["@xenova/transformers"],
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      sharp$: false,
+      "onnxruntime-node$": false,
+    };
+    return config;
+  },
   headers: async () => [
     {
       source: "/manifest.json",
