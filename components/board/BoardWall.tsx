@@ -82,7 +82,7 @@ function StickyNote({
         left: pos.x,
         top: pos.y,
         transform: `rotate(${note.rotation || 0}deg)`,
-        background: preset.fill,
+        backgroundColor: preset.fill,
         boxShadow: `2px 4px 12px ${preset.shadow}, 0 1px 0 ${preset.edge}`,
       }}
     >
@@ -138,12 +138,31 @@ export function BoardWall({
     redraw();
   }, [redraw]);
 
+  const prevNoteCount = useRef(notes.length);
+
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     scroller.scrollLeft = (WALL_W - scroller.clientWidth) / 2;
     scroller.scrollTop = (WALL_H - scroller.clientHeight) / 2;
   }, []);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || notes.length <= prevNoteCount.current) {
+      prevNoteCount.current = notes.length;
+      return;
+    }
+    const newest = notes[0];
+    if (newest) {
+      scroller.scrollTo({
+        left: Math.max(0, newest.x - scroller.clientWidth / 2 + 84),
+        top: Math.max(0, newest.y - scroller.clientHeight / 2 + 70),
+        behavior: "smooth",
+      });
+    }
+    prevNoteCount.current = notes.length;
+  }, [notes]);
 
   function wallPoint(e: React.PointerEvent): { x: number; y: number } {
     const canvas = canvasRef.current!;

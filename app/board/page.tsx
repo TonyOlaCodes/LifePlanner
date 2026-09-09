@@ -6,7 +6,7 @@ import { BoardRoomList } from "@/components/board/BoardRoomList";
 import { BoardToolbar } from "@/components/board/BoardToolbar";
 import { BoardWall } from "@/components/board/BoardWall";
 import { RoomLobby } from "@/components/multiplayer/RoomLobby";
-import type { DrawTool } from "@/lib/board/constants";
+import { WALL_H, WALL_W, type DrawTool } from "@/lib/board/constants";
 import { loadBoardRooms, rememberBoardRoom, removeBoardRoom } from "@/lib/board/roomHistory";
 import { useRoom } from "@/lib/multiplayer/useRoom";
 import { setPlayerName } from "@/lib/multiplayer/playerId";
@@ -84,6 +84,15 @@ export default function BoardPage() {
       rememberBoardRoom({ id, label: "Joined", role: "member", lastVisited: Date.now() });
       setSavedRooms(loadBoardRooms());
     }
+  }
+
+  function dropNoteCenter(text: string) {
+    void sendAction("add-note", {
+      noteText: text,
+      noteColor: stickyColor,
+      noteX: WALL_W / 2 - 84,
+      noteY: WALL_H / 2 - 70,
+    });
   }
 
   function handleAddStrokes(batch: Omit<BoardStroke, "authorId" | "createdAt">[]) {
@@ -176,7 +185,7 @@ export default function BoardPage() {
                 onChange={(e) => setNote(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && note.trim()) {
-                    void sendAction("add-note", { noteText: note, noteColor: stickyColor });
+                    dropNoteCenter(note);
                     setNote("");
                   }
                 }}
@@ -186,7 +195,7 @@ export default function BoardPage() {
                 className="room-btn room-btn--primary tap-scale board-drop-btn"
                 disabled={!note.trim()}
                 onClick={() => {
-                  void sendAction("add-note", { noteText: note, noteColor: stickyColor });
+                  dropNoteCenter(note);
                   setNote("");
                 }}
               >
