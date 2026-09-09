@@ -15,9 +15,14 @@ import type { BoardNote, BoardStroke, Room } from "@/lib/multiplayer/types";
 export const dynamic = "force-dynamic";
 
 const ROUND_MS = 3600;
+const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
 
 function snapshot(room: Room) {
   return { ...room, serverNow: Date.now() };
+}
+
+function json(data: unknown, status = 200) {
+  return NextResponse.json(data, { status, headers: NO_STORE });
 }
 
 function getWaveLock(room: Room) {
@@ -25,7 +30,7 @@ function getWaveLock(room: Room) {
   return room.waveLock;
 }
 
-function advanceWaveLockIfNeeded(room: Room): Room {
+async function advanceWaveLockIfNeeded(room: Room): Promise<Room> {
   const wl = getWaveLock(room);
   const now = Date.now();
 
@@ -81,20 +86,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ roomId: string 
 
   let room = await getRoom(roomId);
   if (!room) {
-    return NextResponse.json(
-      { error: "Room not found — it may have expired. Create a new room." },
-      { status: 404 },
-    );
+    return json({ error: "Room not found — it may have expired. Create a new room." }, 404);
   }
 
   if (playerId) {
     if (isBanned(room, playerId)) {
-      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      return json({ error: "Removed from room" }, 403);
     }
 
     const member = room.players.find((p) => p.id === playerId);
     if (!member) {
-      const rejoined = upsertPlayer(room, {
+      const rejoined = await upsertPlayer(room, {
         id: playerId,
         name: playerName,
         ready: false,
@@ -102,20 +104,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ roomId: string 
         color: pickColor(room.players.length),
       });
       if (!rejoined) {
-        return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+        return json({ error: "Removed from room" }, 403);
       }
       room = rejoined;
     } else {
-      const touched = touchPlayer(room, playerId);
+      const touched = await touchPlayer(room, playerId);
       if (touched) room = touched;
     }
   }
 
   if (room.app === "wave-lock") {
-    room = advanceWaveLockIfNeeded(room);
+    room = await advanceWaveLockIfNeeded(room);
   }
 
-  return NextResponse.json(snapshot(room));
+  return json(snapshot(room));
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ roomId: string }> }) {
@@ -145,27 +147,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
 
   let room = await getRoom(roomId);
   if (!room) {
-    return NextResponse.json(
-      { error: "Room not found — it may have expired. Create a new room." },
-      { status: 404 },
-    );
+    return json({ error: "Room not found — it may have expired. Create a new room." }, 404);
   }
 
   const playerId = body.playerId?.trim();
-  if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
+  if (!playerId) return json({ error: "Missing playerId" }, 400);
 
   const action = body.action || "";
   const isMember = room.players.some((p) => p.id === playerId);
 
   if (action !== "join" && action !== "heartbeat" && !isMember) {
-    return NextResponse.json({ error: "Not in room" }, { status: 403 });
+    return json({ error: "Not in room" }, 403);
   }
 
   if (action === "heartbeat" || action === "join") {
     if (isBanned(room, playerId)) {
-      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      return json({ error: "Removed from room" }, 403);
     }
-    const updated = upsertPlayer(room, {
+    const updated = await upsertPlayer(room, {
       id: playerId,
       name: body.playerName?.trim() || "Player",
       ready: false,
@@ -173,18 +172,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
       color: room.players.find((p) => p.id === playerId)?.color || pickColor(room.players.length),
     });
     if (!updated) {
-      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      return json({ error: "Removed from room" }, 403);
     }
-    return NextResponse.json(snapshot(updated));
+    return json(snapshot(updated));
   }
 
   if (action === "ready") {
     const p = room.players.find((x) => x.id === playerId);
-    if (!p) return NextResponse.json({ error: "Player not in room" }, { status: 403 });
+    if (!p) return json({ error: "Player not in room" }, 403);
     p.ready = !!body.ready;
     p.lastSeen = Date.now();
-    room = saveRoom(room);
-    return NextResponse.json(snapshot(room));
+    room = await saveRoom(room);
+    return json(snapshot(room));
   }
 
   if (action === "reset-lobby" && room.app === "wave-lock") {
@@ -200,13 +199,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
       p.ready = false;
     });
     room.waveLock = wl;
-    room = saveRoom(room);
-    return NextResponse.json(snapshot(room));
+    room = await saveRoom(room);
+    return json(snapshot(room));
   }
 
   if (action === "start" && room.app === "wave-lock") {
     if (!allReady(room)) {
-      return NextResponse.json({ error: "Everyone must be ready first" }, { status: 400 });
+      return json({ error: "Everyone must be ready first" }, 400);
     }
     const wl = getWaveLock(room);
     wl.phase = "countdown";
@@ -217,23 +216,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
     wl.phaseStartedAt = Date.now();
     wl.presses = Object.fromEntries(room.players.map((p) => [p.id, null]));
     room.waveLock = wl;
-    room = saveRoom(room);
-    return NextResponse.json(snapshot(room));
+    room = await saveRoom(room);
+    return json(snapshot(room));
   }
 
   if (action === "tap" && room.app === "wave-lock") {
-    let r = advanceWaveLockIfNeeded(room);
+    let r = await advanceWaveLockIfNeeded(room);
     const wl = getWaveLock(r);
     if (wl.phase !== "playing") {
-      return NextResponse.json({ error: "Not in play phase" }, { status: 400 });
+      return json({ error: "Not in play phase" }, 400);
     }
     if (wl.presses[playerId] != null) {
-      return NextResponse.json(snapshot(r));
+      return json(snapshot(r));
     }
     wl.presses[playerId] = Date.now() - wl.phaseStartedAt;
     r.waveLock = wl;
-    r = saveRoom(r);
-    return NextResponse.json(snapshot(r));
+    r = await saveRoom(r);
+    return json(snapshot(r));
   }
 
   if (room.app === "poll") {
@@ -242,7 +241,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
     if (action === "set-poll") {
       const opts = (body.options || []).map((o) => o.trim()).filter(Boolean).slice(0, 6);
       if (!body.question?.trim() || opts.length < 2) {
-        return NextResponse.json({ error: "Need a question and at least 2 options" }, { status: 400 });
+        return json({ error: "Need a question and at least 2 options" }, 400);
       }
       room.poll = {
         question: body.question.trim(),
@@ -250,21 +249,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
         votes: Object.fromEntries(opts.map((_, i) => [i, 0])),
         voted: {},
       };
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "vote") {
       const idx = body.optionIndex;
       if (idx == null || !room.poll.options[idx]) {
-        return NextResponse.json({ error: "Invalid option" }, { status: 400 });
+        return json({ error: "Invalid option" }, 400);
       }
       const prev = room.poll.voted[playerId];
       if (prev != null) room.poll.votes[prev] = Math.max(0, (room.poll.votes[prev] || 0) - 1);
       room.poll.voted[playerId] = idx;
       room.poll.votes[idx] = (room.poll.votes[idx] || 0) + 1;
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
   }
 
@@ -283,25 +282,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
 
     if (action === "kick-player") {
       if (room.hostId !== playerId) {
-        return NextResponse.json({ error: "Only the host can kick players" }, { status: 403 });
+        return json({ error: "Only the host can kick players" }, 403);
       }
       const target = body.targetPlayerId?.trim();
       if (!target || target === playerId) {
-        return NextResponse.json({ error: "Invalid player" }, { status: 400 });
+        return json({ error: "Invalid player" }, 400);
       }
       if (!room.bannedIds) room.bannedIds = [];
       if (!room.bannedIds.includes(target)) room.bannedIds.push(target);
       room.players = room.players.filter((p) => p.id !== target);
       if (room.players.length === 0) {
-        return NextResponse.json({ error: "Cannot kick everyone" }, { status: 400 });
+        return json({ error: "Cannot kick everyone" }, 400);
       }
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "add-note") {
       const text = body.noteText?.trim();
-      if (!text) return NextResponse.json({ error: "Empty note" }, { status: 400 });
+      if (!text) return json({ error: "Empty note" }, 400);
       const author = room.players.find((p) => p.id === playerId);
       const w = room.board.wallWidth || 2800;
       const h = room.board.wallHeight || 2000;
@@ -318,31 +317,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
       };
       room.board.notes.unshift(note);
       if (room.board.notes.length > 60) room.board.notes.length = 60;
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "move-note") {
       const noteId = body.noteId?.trim();
       if (!noteId || typeof body.noteX !== "number" || typeof body.noteY !== "number") {
-        return NextResponse.json({ error: "Invalid move" }, { status: 400 });
+        return json({ error: "Invalid move" }, 400);
       }
       const note = room.board.notes.find((n) => n.id === noteId);
-      if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+      if (!note) return json({ error: "Note not found" }, 404);
       if (note.authorId !== playerId && room.hostId !== playerId) {
-        return NextResponse.json({ error: "You can only move your own notes" }, { status: 403 });
+        return json({ error: "You can only move your own notes" }, 403);
       }
       const w = room.board.wallWidth || 2800;
       const h = room.board.wallHeight || 2000;
       note.x = Math.max(0, Math.min(w - 160, body.noteX));
       note.y = Math.max(0, Math.min(h - 160, body.noteY));
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "add-strokes") {
       const incoming = body.strokes || [];
-      if (!incoming.length) return NextResponse.json(snapshot(room));
+      if (!incoming.length) return json(snapshot(room));
       for (const s of incoming.slice(0, 8)) {
         if (!s.points?.length) continue;
         room.board.strokes.push({
@@ -358,23 +357,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
       if (room.board.strokes.length > 800) {
         room.board.strokes = room.board.strokes.slice(-800);
       }
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "clear-board" && room.hostId === playerId) {
       room.board.notes = [];
       room.board.strokes = [];
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
 
     if (action === "clear-drawings" && room.hostId === playerId) {
       room.board.strokes = [];
-      room = saveRoom(room);
-      return NextResponse.json(snapshot(room));
+      room = await saveRoom(room);
+      return json(snapshot(room));
     }
   }
 
-  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  return json({ error: "Unknown action" }, 400);
 }

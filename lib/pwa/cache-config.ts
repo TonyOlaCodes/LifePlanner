@@ -49,7 +49,12 @@ export const runtimeCaching = [
     },
   },
   {
-    urlPattern: /^\/(?:$|habits|planner|focus|journal|settings|offline)/i,
+    urlPattern: /\/api\/rooms/i,
+    handler: "NetworkOnly" as const,
+    options: { cacheName: "lockin-api-rooms" },
+  },
+  {
+    urlPattern: /^\/(?:$|habits|planner|focus|journal|settings|offline|board|poll|wave-lock|transcript|life)/i,
     handler: "NetworkFirst" as const,
     options: {
       cacheName: "lockin-pages",

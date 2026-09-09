@@ -9,15 +9,19 @@ function roomsFilePath(): string {
   return path.join(process.cwd(), ".data", "studio-rooms.json");
 }
 
-function hasUpstash(): boolean {
-  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+function redisRestConfig(): { url: string; token: string } | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return { url, token };
 }
 
-async function upstashGet(): Promise<string | null> {
-  if (!hasUpstash()) return null;
-  const res = await fetch(process.env.UPSTASH_REDIS_REST_URL!, {
+async function redisRestGet(): Promise<string | null> {
+  const cfg = redisRestConfig();
+  if (!cfg) return null;
+  const res = await fetch(cfg.url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+    headers: { Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify(["GET", ROOMS_KEY]),
     cache: "no-store",
   });
@@ -26,14 +30,34 @@ async function upstashGet(): Promise<string | null> {
   return data.result ?? null;
 }
 
-async function upstashSet(json: string): Promise<void> {
-  if (!hasUpstash()) return;
-  await fetch(process.env.UPSTASH_REDIS_REST_URL!, {
+async function redisRestSet(json: string): Promise<void> {
+  const cfg = redisRestConfig();
+  if (!cfg) return;
+  await fetch(cfg.url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+    headers: { Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify(["SET", ROOMS_KEY, json]),
     cache: "no-store",
-  }).catch(() => undefined);
+  });
+}
+
+async function kvGet(): Promise<string | null> {
+  try {
+    const { kv } = await import("@vercel/kv");
+    const value = await kv.get<string>(ROOMS_KEY);
+    return value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function kvSet(json: string): Promise<void> {
+  try {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(ROOMS_KEY, json);
+  } catch {
+    // KV not configured
+  }
 }
 
 function readFile(): Record<string, Room> {
@@ -58,64 +82,50 @@ function writeFile(rooms: Record<string, Room>): void {
   }
 }
 
-let upstashLoaded = false;
-let upstashLoadPromise: Promise<void> | null = null;
-
 export function roomsToRecord(map: Map<string, Room>): Record<string, Room> {
   return Object.fromEntries(map);
 }
 
-export function recordToRooms(record: Record<string, Room>): Map<string, Room> {
-  const map = new Map<string, Room>();
+function mergeRecord(into: Map<string, Room>, record: Record<string, Room>) {
   for (const [id, room] of Object.entries(record)) {
-    map.set(id.toUpperCase(), room);
+    const key = id.toUpperCase();
+    const existing = into.get(key);
+    if (!existing || room.updatedAt >= existing.updatedAt) {
+      into.set(key, room);
+    }
   }
-  return map;
 }
 
-/** Merge persisted rooms into the in-memory map (newest updatedAt wins). */
 export function mergePersistedRooms(memory: Map<string, Room>): Map<string, Room> {
-  const fileRecord = readFile();
   const merged = new Map(memory);
+  mergeRecord(merged, readFile());
+  return merged;
+}
 
-  for (const [id, room] of Object.entries(fileRecord)) {
-    const key = id.toUpperCase();
-    const existing = merged.get(key);
-    if (!existing || room.updatedAt >= existing.updatedAt) {
-      merged.set(key, room);
+/** Load rooms from every configured backend (newest updatedAt wins). */
+export async function loadAllRooms(memory: Map<string, Room>): Promise<Map<string, Room>> {
+  const merged = mergePersistedRooms(memory);
+
+  const [kvRaw, redisRaw] = await Promise.all([kvGet(), redisRestGet()]);
+  for (const raw of [kvRaw, redisRaw]) {
+    if (!raw) continue;
+    try {
+      mergeRecord(merged, JSON.parse(raw) as Record<string, Room>);
+    } catch {
+      // ignore corrupt remote data
     }
   }
 
   return merged;
 }
 
-export function persistRooms(map: Map<string, Room>): void {
+export async function persistRooms(map: Map<string, Room>): Promise<void> {
   const record = roomsToRecord(map);
+  const json = JSON.stringify(record);
   writeFile(record);
-  void upstashSet(JSON.stringify(record));
+  await Promise.all([kvSet(json), redisRestSet(json)]);
 }
 
-export async function hydrateFromUpstash(memory: Map<string, Room>): Promise<Map<string, Room>> {
-  if (!hasUpstash() || upstashLoaded) return memory;
-  if (!upstashLoadPromise) {
-    upstashLoadPromise = (async () => {
-      const raw = await upstashGet();
-      upstashLoaded = true;
-      if (!raw) return;
-      try {
-        const record = JSON.parse(raw) as Record<string, Room>;
-        for (const [id, room] of Object.entries(record)) {
-          const key = id.toUpperCase();
-          const existing = memory.get(key);
-          if (!existing || room.updatedAt >= existing.updatedAt) {
-            memory.set(key, room);
-          }
-        }
-      } catch {
-        // ignore corrupt remote data
-      }
-    })();
-  }
-  await upstashLoadPromise;
-  return memory;
+export function hasSharedStorage(): boolean {
+  return Boolean(redisRestConfig() || process.env.KV_REST_API_URL || process.env.KV_URL);
 }

@@ -4,6 +4,8 @@ import type { RoomApp } from "@/lib/multiplayer/types";
 
 export const dynamic = "force-dynamic";
 
+const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
+
 export async function POST(req: Request) {
   const body = (await req.json()) as {
     app?: RoomApp;
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
   const playerName = body.playerName?.trim() || "Player";
 
   if (!app || !playerId) {
-    return NextResponse.json({ error: "Missing app or playerId" }, { status: 400 });
+    return NextResponse.json({ error: "Missing app or playerId" }, { status: 400, headers: NO_STORE });
   }
 
   if (body.roomId) {
@@ -25,18 +27,18 @@ export async function POST(req: Request) {
     if (!existing) {
       return NextResponse.json(
         { error: "Room not found — it may have expired. Create a new room." },
-        { status: 404 },
+        { status: 404, headers: NO_STORE },
       );
     }
     if (existing.app !== app) {
-      return NextResponse.json({ error: "Wrong app for this room" }, { status: 400 });
+      return NextResponse.json({ error: "Wrong app for this room" }, { status: 400, headers: NO_STORE });
     }
     if (isBanned(existing, playerId)) {
-      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      return NextResponse.json({ error: "Removed from room" }, { status: 403, headers: NO_STORE });
     }
 
     const existingPlayer = existing.players.find((p) => p.id === playerId);
-    const updated = upsertPlayer(existing, {
+    const updated = await upsertPlayer(existing, {
       id: playerId,
       name: playerName,
       ready: existingPlayer?.ready ?? false,
@@ -44,10 +46,10 @@ export async function POST(req: Request) {
       color: existingPlayer?.color || pickColor(existing.players.length),
     });
     if (!updated) {
-      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      return NextResponse.json({ error: "Removed from room" }, { status: 403, headers: NO_STORE });
     }
 
-    return NextResponse.json({ ...updated, serverNow: Date.now() });
+    return NextResponse.json({ ...updated, serverNow: Date.now() }, { headers: NO_STORE });
   }
 
   const room = await createRoom(app, {
@@ -58,5 +60,5 @@ export async function POST(req: Request) {
     color: pickColor(0),
   });
 
-  return NextResponse.json({ ...room, serverNow: Date.now() });
+  return NextResponse.json({ ...room, serverNow: Date.now() }, { headers: NO_STORE });
 }

@@ -10,12 +10,14 @@ type UseRoomOptions = {
   pollMs?: number;
 };
 
+const FETCH_OPTS: RequestInit = { cache: "no-store" };
+
 export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const playerId = getPlayerId();
   const mounted = useRef(true);
+  const joinedAtRef = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -26,10 +28,12 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
 
   const fetchRoom = useCallback(async () => {
     if (!roomId) return;
+    const playerId = getPlayerId();
     const playerName = getPlayerName();
     try {
       const res = await fetch(
         `/api/rooms/${roomId}?playerId=${encodeURIComponent(playerId)}&playerName=${encodeURIComponent(playerName)}`,
+        FETCH_OPTS,
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -40,6 +44,7 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ app, roomId, playerId, playerName }),
+            ...FETCH_OPTS,
           });
           if (rejoin.ok) {
             const data = (await rejoin.json()) as RoomSnapshot;
@@ -51,9 +56,12 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
           }
         }
 
+        const graceMs = Date.now() - joinedAtRef.current;
         if (mounted.current) {
           setError(msg);
-          if (res.status === 403 || res.status === 404) setRoom(null);
+          if ((res.status === 403 || res.status === 404) && graceMs > 4000) {
+            setRoom(null);
+          }
         }
         return;
       }
@@ -65,7 +73,7 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
     } catch (e) {
       if (mounted.current) setError(e instanceof Error ? e.message : "Could not load room");
     }
-  }, [roomId, playerId, app]);
+  }, [roomId, app]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -78,6 +86,7 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
     async (name?: string) => {
       setLoading(true);
       setError("");
+      const playerId = getPlayerId();
       const displayName = name?.trim() || getPlayerName();
       setPlayerName(displayName);
       try {
@@ -85,9 +94,11 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ app, playerId, playerName: displayName }),
+          ...FETCH_OPTS,
         });
         const data = (await res.json()) as RoomSnapshot & { error?: string };
         if (!res.ok) throw new Error(data.error || "Could not create room");
+        joinedAtRef.current = Date.now();
         if (mounted.current) setRoom(data);
         return data.id;
       } catch (e) {
@@ -105,6 +116,7 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
     async (code: string, name?: string) => {
       setLoading(true);
       setError("");
+      const playerId = getPlayerId();
       const displayName = name?.trim() || getPlayerName();
       setPlayerName(displayName);
       try {
@@ -117,9 +129,11 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
             playerId,
             playerName: displayName,
           }),
+          ...FETCH_OPTS,
         });
         const data = (await res.json()) as RoomSnapshot & { error?: string };
         if (!res.ok) throw new Error(data.error || "Could not join room");
+        joinedAtRef.current = Date.now();
         if (mounted.current) {
           setRoom(data);
           setError("");
@@ -133,17 +147,19 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
         if (mounted.current) setLoading(false);
       }
     },
-    [app, playerId],
+    [app],
   );
 
   const sendAction = useCallback(
     async (action: string, payload: Record<string, unknown> = {}) => {
       if (!roomId) return null;
+      const playerId = getPlayerId();
       try {
         const res = await fetch(`/api/rooms/${roomId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, playerId, ...payload }),
+          ...FETCH_OPTS,
         });
         const data = (await res.json()) as RoomSnapshot & { error?: string };
         if (!res.ok) throw new Error(data.error || "Action failed");
@@ -158,14 +174,14 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
         return null;
       }
     },
-    [roomId, playerId],
+    [roomId],
   );
 
   return {
     room,
     error,
     loading,
-    playerId,
+    playerId: getPlayerId(),
     playerName: getPlayerName(),
     createRoom,
     joinRoom,

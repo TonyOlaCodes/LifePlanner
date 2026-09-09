@@ -1,8 +1,4 @@
-import {
-  hydrateFromUpstash,
-  mergePersistedRooms,
-  persistRooms,
-} from "./persist";
+import { loadAllRooms, persistRooms } from "./persist";
 import type { BoardState, Player, PollState, Room, RoomApp, WaveLockState } from "./types";
 
 const ROOM_TTL_MS = 1000 * 60 * 60 * 2;
@@ -28,7 +24,7 @@ declare global {
   var __studioRooms: Map<string, Room> | undefined;
 }
 
-const rooms: Map<string, Room> = global.__studioRooms ?? mergePersistedRooms(new Map());
+const rooms: Map<string, Room> = global.__studioRooms ?? new Map();
 if (!global.__studioRooms) global.__studioRooms = rooms;
 
 function randomCode(): string {
@@ -38,7 +34,7 @@ function randomCode(): string {
   return out;
 }
 
-function prune() {
+async function prune() {
   const now = Date.now();
   let changed = false;
 
@@ -55,7 +51,7 @@ function prune() {
     }
   }
 
-  if (changed) persistRooms(rooms);
+  if (changed) await persistRooms(rooms);
 }
 
 function defaultWaveLock(): WaveLockState {
@@ -85,14 +81,14 @@ function defaultBoard(): BoardState {
   return { wallWidth: 2800, wallHeight: 2000, notes: [], strokes: [] };
 }
 
-async function ensureHydrated() {
-  await hydrateFromUpstash(rooms);
-  mergePersistedRooms(rooms).forEach((room, id) => rooms.set(id, room));
+async function syncRooms() {
+  const merged = await loadAllRooms(rooms);
+  merged.forEach((room, id) => rooms.set(id, room));
 }
 
 export async function createRoom(app: RoomApp, host: Player): Promise<Room> {
-  await ensureHydrated();
-  prune();
+  await syncRooms();
+  await prune();
   let id = randomCode();
   while (rooms.has(id)) id = randomCode();
 
@@ -111,21 +107,21 @@ export async function createRoom(app: RoomApp, host: Player): Promise<Room> {
   if (app === "board") room.board = defaultBoard();
 
   rooms.set(id, room);
-  persistRooms(rooms);
+  await persistRooms(rooms);
   return structuredClone(room);
 }
 
 export async function getRoom(id: string): Promise<Room | null> {
-  await ensureHydrated();
-  prune();
+  await syncRooms();
+  await prune();
   const room = rooms.get(id.toUpperCase());
   return room ? structuredClone(room) : null;
 }
 
-export function saveRoom(room: Room): Room {
+export async function saveRoom(room: Room): Promise<Room> {
   room.updatedAt = Date.now();
   rooms.set(room.id, structuredClone(room));
-  persistRooms(rooms);
+  await persistRooms(rooms);
   return room;
 }
 
@@ -137,7 +133,7 @@ export function isBanned(room: Room, playerId: string): boolean {
   return room.bannedIds?.includes(playerId) ?? false;
 }
 
-export function upsertPlayer(room: Room, player: Player): Room | null {
+export async function upsertPlayer(room: Room, player: Player): Promise<Room | null> {
   if (isBanned(room, player.id)) return null;
 
   const idx = room.players.findIndex((p) => p.id === player.id);
@@ -153,7 +149,7 @@ export function upsertPlayer(room: Room, player: Player): Room | null {
   return saveRoom(room);
 }
 
-export function touchPlayer(room: Room, playerId: string): Room | null {
+export async function touchPlayer(room: Room, playerId: string): Promise<Room | null> {
   const p = room.players.find((x) => x.id === playerId);
   if (!p) return null;
   p.lastSeen = Date.now();
