@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import {
   allReady,
   getRoom,
+  isBanned,
+  pickColor,
   saveRoom,
-  scoreWaveLockTap,
   touchPlayer,
   upsertPlayer,
-  waveLockExpectedTapMs,
-} from "@/lib/multiplayer/store";
+} from "@/lib/multiplayer/roomStore";
+import { scoreWaveLockTap, waveLockExpectedTapMs } from "@/lib/multiplayer/waveLockUtils";
 import type { BoardNote, BoardStroke, Room } from "@/lib/multiplayer/types";
 
 export const dynamic = "force-dynamic";
@@ -76,17 +77,38 @@ export async function GET(req: Request, ctx: { params: Promise<{ roomId: string 
   const { roomId } = await ctx.params;
   const url = new URL(req.url);
   const playerId = url.searchParams.get("playerId") || "";
+  const playerName = url.searchParams.get("playerName") || "Player";
 
-  let room = getRoom(roomId);
-  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  let room = await getRoom(roomId);
+  if (!room) {
+    return NextResponse.json(
+      { error: "Room not found — it may have expired. Create a new room." },
+      { status: 404 },
+    );
+  }
 
   if (playerId) {
+    if (isBanned(room, playerId)) {
+      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+    }
+
     const member = room.players.find((p) => p.id === playerId);
     if (!member) {
-      return NextResponse.json({ error: "Not in room" }, { status: 403 });
+      const rejoined = upsertPlayer(room, {
+        id: playerId,
+        name: playerName,
+        ready: false,
+        lastSeen: Date.now(),
+        color: pickColor(room.players.length),
+      });
+      if (!rejoined) {
+        return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+      }
+      room = rejoined;
+    } else {
+      const touched = touchPlayer(room, playerId);
+      if (touched) room = touched;
     }
-    const touched = touchPlayer(room, playerId);
-    if (touched) room = touched;
   }
 
   if (room.app === "wave-lock") {
@@ -121,8 +143,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
     options?: string[];
   };
 
-  let room = getRoom(roomId);
-  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  let room = await getRoom(roomId);
+  if (!room) {
+    return NextResponse.json(
+      { error: "Room not found — it may have expired. Create a new room." },
+      { status: 404 },
+    );
+  }
 
   const playerId = body.playerId?.trim();
   if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
@@ -135,14 +162,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
   }
 
   if (action === "heartbeat" || action === "join") {
-    room = upsertPlayer(room, {
+    if (isBanned(room, playerId)) {
+      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+    }
+    const updated = upsertPlayer(room, {
       id: playerId,
       name: body.playerName?.trim() || "Player",
       ready: false,
       lastSeen: Date.now(),
-      color: room.players.find((p) => p.id === playerId)?.color || "#FB7185",
+      color: room.players.find((p) => p.id === playerId)?.color || pickColor(room.players.length),
     });
-    return NextResponse.json(snapshot(room));
+    if (!updated) {
+      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+    }
+    return NextResponse.json(snapshot(updated));
   }
 
   if (action === "ready") {
@@ -256,6 +289,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
       if (!target || target === playerId) {
         return NextResponse.json({ error: "Invalid player" }, { status: 400 });
       }
+      if (!room.bannedIds) room.bannedIds = [];
+      if (!room.bannedIds.includes(target)) room.bannedIds.push(target);
       room.players = room.players.filter((p) => p.id !== target);
       if (room.players.length === 0) {
         return NextResponse.json({ error: "Cannot kick everyone" }, { status: 400 });

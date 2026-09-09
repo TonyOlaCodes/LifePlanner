@@ -5,7 +5,7 @@ import { MiniAppShell } from "@/components/mini-app/MiniAppShell";
 import { RoomLobby } from "@/components/multiplayer/RoomLobby";
 import { useRoom } from "@/lib/multiplayer/useRoom";
 import { setPlayerName } from "@/lib/multiplayer/playerId";
-import { waveLockExpectedTapMs } from "@/lib/multiplayer/store";
+import { waveLockExpectedTapMs } from "@/lib/multiplayer/waveLockUtils";
 
 const ACCENT = "#FB7185";
 const ROUND_MS = 3600;

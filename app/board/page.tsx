@@ -54,17 +54,15 @@ export default function BoardPage() {
     async (id: string) => {
       setPlayerName(name);
       const joined = await joinRoom(id, name);
-      if (joined) setRoomId(joined);
+      if (joined) {
+        setRoomId(joined);
+      } else {
+        removeBoardRoom(id);
+        setSavedRooms(loadBoardRooms());
+      }
     },
     [joinRoom, name],
   );
-
-  useEffect(() => {
-    if (!room || !roomId) return;
-    if (!room.players.some((p) => p.id === playerId)) {
-      setRoomId(null);
-    }
-  }, [room, roomId, playerId]);
 
   async function handleCreate() {
     setPlayerName(name);

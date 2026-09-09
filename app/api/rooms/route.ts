@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRoom, getRoom, pickColor, upsertPlayer } from "@/lib/multiplayer/store";
+import { createRoom, getRoom, isBanned, pickColor, upsertPlayer } from "@/lib/multiplayer/roomStore";
 import type { RoomApp } from "@/lib/multiplayer/types";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +21,19 @@ export async function POST(req: Request) {
   }
 
   if (body.roomId) {
-    const existing = getRoom(body.roomId);
-    if (!existing) return NextResponse.json({ error: "Room not found" }, { status: 404 });
-    if (existing.app !== app) return NextResponse.json({ error: "Wrong app for this room" }, { status: 400 });
+    const existing = await getRoom(body.roomId);
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Room not found — it may have expired. Create a new room." },
+        { status: 404 },
+      );
+    }
+    if (existing.app !== app) {
+      return NextResponse.json({ error: "Wrong app for this room" }, { status: 400 });
+    }
+    if (isBanned(existing, playerId)) {
+      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+    }
 
     const existingPlayer = existing.players.find((p) => p.id === playerId);
     const updated = upsertPlayer(existing, {
@@ -33,11 +43,14 @@ export async function POST(req: Request) {
       lastSeen: Date.now(),
       color: existingPlayer?.color || pickColor(existing.players.length),
     });
+    if (!updated) {
+      return NextResponse.json({ error: "Removed from room" }, { status: 403 });
+    }
 
     return NextResponse.json({ ...updated, serverNow: Date.now() });
   }
 
-  const room = createRoom(app, {
+  const room = await createRoom(app, {
     id: playerId,
     name: playerName,
     ready: false,

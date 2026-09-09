@@ -20,6 +20,9 @@
 # production
 /build
 
+# multiplayer room persistence (local dev)
+/.data/
+
 # misc
 .DS_Store
 *.pem

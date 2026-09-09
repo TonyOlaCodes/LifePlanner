@@ -1,7 +1,12 @@
+import {
+  hydrateFromUpstash,
+  mergePersistedRooms,
+  persistRooms,
+} from "./persist";
 import type { BoardState, Player, PollState, Room, RoomApp, WaveLockState } from "./types";
 
 const ROOM_TTL_MS = 1000 * 60 * 60 * 2;
-const STALE_PLAYER_MS = 1000 * 45;
+const STALE_PLAYER_MS = 1000 * 60 * 5;
 
 const PLAYER_COLORS = [
   "#FB7185",
@@ -23,7 +28,7 @@ declare global {
   var __studioRooms: Map<string, Room> | undefined;
 }
 
-const rooms: Map<string, Room> = global.__studioRooms ?? new Map();
+const rooms: Map<string, Room> = global.__studioRooms ?? mergePersistedRooms(new Map());
 if (!global.__studioRooms) global.__studioRooms = rooms;
 
 function randomCode(): string {
@@ -35,14 +40,22 @@ function randomCode(): string {
 
 function prune() {
   const now = Date.now();
+  let changed = false;
+
   for (const [id, room] of rooms) {
     if (now - room.updatedAt > ROOM_TTL_MS) {
       rooms.delete(id);
+      changed = true;
       continue;
     }
-    room.players = room.players.filter((p) => now - p.lastSeen < STALE_PLAYER_MS);
-    if (room.players.length === 0) rooms.delete(id);
+    const active = room.players.filter((p) => now - p.lastSeen < STALE_PLAYER_MS);
+    if (active.length !== room.players.length) {
+      room.players = active;
+      changed = true;
+    }
   }
+
+  if (changed) persistRooms(rooms);
 }
 
 function defaultWaveLock(): WaveLockState {
@@ -72,7 +85,13 @@ function defaultBoard(): BoardState {
   return { wallWidth: 2800, wallHeight: 2000, notes: [], strokes: [] };
 }
 
-export function createRoom(app: RoomApp, host: Player): Room {
+async function ensureHydrated() {
+  await hydrateFromUpstash(rooms);
+  mergePersistedRooms(rooms).forEach((room, id) => rooms.set(id, room));
+}
+
+export async function createRoom(app: RoomApp, host: Player): Promise<Room> {
+  await ensureHydrated();
   prune();
   let id = randomCode();
   while (rooms.has(id)) id = randomCode();
@@ -82,6 +101,7 @@ export function createRoom(app: RoomApp, host: Player): Room {
     app,
     hostId: host.id,
     players: [host],
+    bannedIds: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -91,10 +111,12 @@ export function createRoom(app: RoomApp, host: Player): Room {
   if (app === "board") room.board = defaultBoard();
 
   rooms.set(id, room);
-  return room;
+  persistRooms(rooms);
+  return structuredClone(room);
 }
 
-export function getRoom(id: string): Room | null {
+export async function getRoom(id: string): Promise<Room | null> {
+  await ensureHydrated();
   prune();
   const room = rooms.get(id.toUpperCase());
   return room ? structuredClone(room) : null;
@@ -103,6 +125,7 @@ export function getRoom(id: string): Room | null {
 export function saveRoom(room: Room): Room {
   room.updatedAt = Date.now();
   rooms.set(room.id, structuredClone(room));
+  persistRooms(rooms);
   return room;
 }
 
@@ -110,7 +133,13 @@ export function pickColor(index: number): string {
   return PLAYER_COLORS[index % PLAYER_COLORS.length];
 }
 
-export function upsertPlayer(room: Room, player: Player): Room {
+export function isBanned(room: Room, playerId: string): boolean {
+  return room.bannedIds?.includes(playerId) ?? false;
+}
+
+export function upsertPlayer(room: Room, player: Player): Room | null {
+  if (isBanned(room, player.id)) return null;
+
   const idx = room.players.findIndex((p) => p.id === player.id);
   if (idx >= 0) {
     room.players[idx] = { ...room.players[idx], ...player, lastSeen: Date.now() };
@@ -133,14 +162,4 @@ export function touchPlayer(room: Room, playerId: string): Room | null {
 
 export function allReady(room: Room): boolean {
   return room.players.length >= 2 && room.players.every((p) => p.ready);
-}
-
-export function waveLockExpectedTapMs(playerIndex: number, playerCount: number, durationMs = 3600): number {
-  const slot = (playerIndex + 0.5) / playerCount;
-  return slot * durationMs;
-}
-
-export function scoreWaveLockTap(expectedMs: number, actualMs: number): number {
-  const delta = Math.abs(expectedMs - actualMs);
-  return Math.max(0, Math.round(1000 - delta * 1.4));
 }

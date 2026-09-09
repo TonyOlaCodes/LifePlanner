@@ -26,14 +26,34 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
 
   const fetchRoom = useCallback(async () => {
     if (!roomId) return;
+    const playerName = getPlayerName();
     try {
-      const res = await fetch(`/api/rooms/${roomId}?playerId=${encodeURIComponent(playerId)}`);
+      const res = await fetch(
+        `/api/rooms/${roomId}?playerId=${encodeURIComponent(playerId)}&playerName=${encodeURIComponent(playerName)}`,
+      );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         const msg = body.error || "Room not found";
+
+        if (res.status === 404) {
+          const rejoin = await fetch("/api/rooms", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ app, roomId, playerId, playerName }),
+          });
+          if (rejoin.ok) {
+            const data = (await rejoin.json()) as RoomSnapshot;
+            if (mounted.current) {
+              setRoom(data);
+              setError("");
+            }
+            return;
+          }
+        }
+
         if (mounted.current) {
           setError(msg);
-          if (res.status === 403) setRoom(null);
+          if (res.status === 403 || res.status === 404) setRoom(null);
         }
         return;
       }
@@ -45,7 +65,7 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
     } catch (e) {
       if (mounted.current) setError(e instanceof Error ? e.message : "Could not load room");
     }
-  }, [roomId, playerId]);
+  }, [roomId, playerId, app]);
 
   useEffect(() => {
     if (!roomId) return;

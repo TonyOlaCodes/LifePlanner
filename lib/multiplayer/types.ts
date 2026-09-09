@@ -65,6 +65,8 @@ export type Room = {
   app: RoomApp;
   hostId: string;
   players: Player[];
+  /** Players removed by the host cannot rejoin. */
+  bannedIds?: string[];
   createdAt: number;
   updatedAt: number;
   waveLock?: WaveLockState;
