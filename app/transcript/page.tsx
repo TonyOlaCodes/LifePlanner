@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Film, Loader2, Upload, Users, Languages } from "lucide-react";
 import {
   LANGUAGE_OPTIONS,
@@ -21,6 +21,7 @@ export default function TranscriptPage() {
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState<TranscriptResult | null>(null);
+  const [editableText, setEditableText] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,14 +36,6 @@ export default function TranscriptPage() {
 
   const canRun = !!file && status !== "working";
 
-  const plainForCopy = useMemo(() => {
-    if (!result) return "";
-    if (!result.speakersEnabled) return result.text;
-    return result.segments
-      .map((s) => `[${formatTimestamp(s.start)}] ${s.speaker}: ${s.text}`)
-      .join("\n");
-  }, [result]);
-
   function onPick(f: File | null) {
     if (!f) return;
     if (!f.type.startsWith("video/") && !f.type.startsWith("audio/")) {
@@ -52,6 +45,7 @@ export default function TranscriptPage() {
     }
     setFile(f);
     setResult(null);
+    setEditableText("");
     setError("");
     setStatus("idle");
     setProgress("");
@@ -62,6 +56,7 @@ export default function TranscriptPage() {
     setStatus("working");
     setError("");
     setResult(null);
+    setEditableText("");
     setProgress("Starting…");
     try {
       const out = await transcribeMedia({
@@ -71,6 +66,12 @@ export default function TranscriptPage() {
         onProgress: setProgress,
       });
       setResult(out);
+      const text = out.speakersEnabled
+        ? out.segments
+            .map((s) => `[${formatTimestamp(s.start)}] ${s.speaker}: ${s.text}`)
+            .join("\n")
+        : out.text;
+      setEditableText(text);
       setStatus("done");
       setProgress("");
     } catch (e) {
@@ -81,9 +82,9 @@ export default function TranscriptPage() {
   }
 
   async function copyAll() {
-    if (!plainForCopy) return;
+    if (!editableText) return;
     try {
-      await navigator.clipboard.writeText(plainForCopy);
+      await navigator.clipboard.writeText(editableText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -219,8 +220,8 @@ export default function TranscriptPage() {
             <span className="transcript-field__label">Editable text</span>
             <textarea
               className="lock-input transcript-textarea"
-              value={plainForCopy}
-              readOnly
+              value={editableText}
+              onChange={(e) => setEditableText(e.target.value)}
               rows={6}
               onFocus={(e) => e.currentTarget.select()}
             />
