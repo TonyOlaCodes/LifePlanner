@@ -117,7 +117,7 @@ export default function TranscriptPage() {
           </span>
           <span className="transcript-upload__text">
             <strong>{file ? file.name : "Choose video"}</strong>
-            <small>{file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB · tap to change` : "MP4, MOV, WebM, or audio"}</small>
+            <small>{file ? `${file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(0)} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`} · tap to change` : "MP4, MOV, WebM, or audio"}</small>
           </span>
         </button>
 
