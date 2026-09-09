@@ -30,19 +30,34 @@ export type PollState = {
   voted: Record<string, number>;
 };
 
+export type BoardStroke = {
+  id: string;
+  authorId: string;
+  tool: "pen" | "marker" | "paint" | "eraser";
+  color: string;
+  width: number;
+  points: { x: number; y: number }[];
+  createdAt: number;
+};
+
 export type BoardNote = {
   id: string;
   authorId: string;
   authorName: string;
+  /** sticky preset id e.g. yellow, pink */
   color: string;
   text: string;
   x: number;
   y: number;
+  rotation: number;
   createdAt: number;
 };
 
 export type BoardState = {
+  wallWidth: number;
+  wallHeight: number;
   notes: BoardNote[];
+  strokes: BoardStroke[];
 };
 
 export type Room = {

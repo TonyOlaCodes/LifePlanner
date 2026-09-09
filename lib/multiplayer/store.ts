@@ -69,7 +69,7 @@ function defaultPoll(): PollState {
 }
 
 function defaultBoard(): BoardState {
-  return { notes: [] };
+  return { wallWidth: 2800, wallHeight: 2000, notes: [], strokes: [] };
 }
 
 export function createRoom(app: RoomApp, host: Player): Room {

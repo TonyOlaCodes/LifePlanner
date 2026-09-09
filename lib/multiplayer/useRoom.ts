@@ -30,7 +30,12 @@ export function useRoom({ app, roomId, pollMs = 900 }: UseRoomOptions) {
       const res = await fetch(`/api/rooms/${roomId}?playerId=${encodeURIComponent(playerId)}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || "Room not found");
+        const msg = body.error || "Room not found";
+        if (mounted.current) {
+          setError(msg);
+          if (res.status === 403) setRoom(null);
+        }
+        return;
       }
       const data = (await res.json()) as RoomSnapshot;
       if (mounted.current) {

@@ -9,7 +9,7 @@ import {
   upsertPlayer,
   waveLockExpectedTapMs,
 } from "@/lib/multiplayer/store";
-import type { BoardNote, Room } from "@/lib/multiplayer/types";
+import type { BoardNote, BoardStroke, Room } from "@/lib/multiplayer/types";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +81,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ roomId: string 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   if (playerId) {
+    const member = room.players.find((p) => p.id === playerId);
+    if (!member) {
+      return NextResponse.json({ error: "Not in room" }, { status: 403 });
+    }
     const touched = touchPlayer(room, playerId);
     if (touched) room = touched;
   }
@@ -101,6 +105,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
     ready?: boolean;
     optionIndex?: number;
     noteText?: string;
+    noteId?: string;
+    noteX?: number;
+    noteY?: number;
+    noteColor?: string;
+    strokes?: Array<{
+      id?: string;
+      tool?: string;
+      color?: string;
+      width?: number;
+      points?: { x: number; y: number }[];
+    }>;
+    targetPlayerId?: string;
     question?: string;
     options?: string[];
   };
@@ -112,6 +128,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
   if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
 
   const action = body.action || "";
+  const isMember = room.players.some((p) => p.id === playerId);
+
+  if (action !== "join" && action !== "heartbeat" && !isMember) {
+    return NextResponse.json({ error: "Not in room" }, { status: 403 });
+  }
 
   if (action === "heartbeat" || action === "join") {
     room = upsertPlayer(room, {
@@ -215,30 +236,106 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
   }
 
   if (room.app === "board") {
-    if (!room.board) room.board = { notes: [] };
+    if (!room.board) room.board = { wallWidth: 2800, wallHeight: 2000, notes: [], strokes: [] };
+    if (!room.board.strokes) room.board.strokes = [];
+    if (!room.board.wallWidth) room.board.wallWidth = 2800;
+    if (!room.board.wallHeight) room.board.wallHeight = 2000;
+    for (const n of room.board.notes) {
+      if (n.rotation == null) n.rotation = 0;
+      if (n.x <= 100 && n.y <= 100) {
+        n.x = (n.x / 100) * (room.board.wallWidth - 200) + 80;
+        n.y = (n.y / 100) * (room.board.wallHeight - 200) + 80;
+      }
+    }
+
+    if (action === "kick-player") {
+      if (room.hostId !== playerId) {
+        return NextResponse.json({ error: "Only the host can kick players" }, { status: 403 });
+      }
+      const target = body.targetPlayerId?.trim();
+      if (!target || target === playerId) {
+        return NextResponse.json({ error: "Invalid player" }, { status: 400 });
+      }
+      room.players = room.players.filter((p) => p.id !== target);
+      if (room.players.length === 0) {
+        return NextResponse.json({ error: "Cannot kick everyone" }, { status: 400 });
+      }
+      room = saveRoom(room);
+      return NextResponse.json(snapshot(room));
+    }
 
     if (action === "add-note") {
       const text = body.noteText?.trim();
       if (!text) return NextResponse.json({ error: "Empty note" }, { status: 400 });
       const author = room.players.find((p) => p.id === playerId);
+      const w = room.board.wallWidth || 2800;
+      const h = room.board.wallHeight || 2000;
       const note: BoardNote = {
         id: randomUUID(),
         authorId: playerId,
         authorName: author?.name || "Player",
-        color: author?.color || "#FBBF24",
+        color: body.noteColor || "yellow",
         text: text.slice(0, 280),
-        x: 8 + Math.random() * 55,
-        y: 8 + Math.random() * 48,
+        x: typeof body.noteX === "number" ? body.noteX : 120 + Math.random() * (w - 320),
+        y: typeof body.noteY === "number" ? body.noteY : 120 + Math.random() * (h - 280),
+        rotation: Math.round((Math.random() - 0.5) * 8),
         createdAt: Date.now(),
       };
       room.board.notes.unshift(note);
-      if (room.board.notes.length > 40) room.board.notes.length = 40;
+      if (room.board.notes.length > 60) room.board.notes.length = 60;
       room = saveRoom(room);
       return NextResponse.json(snapshot(room));
     }
 
-    if (action === "clear-notes" && room.hostId === playerId) {
+    if (action === "move-note") {
+      const noteId = body.noteId?.trim();
+      if (!noteId || typeof body.noteX !== "number" || typeof body.noteY !== "number") {
+        return NextResponse.json({ error: "Invalid move" }, { status: 400 });
+      }
+      const note = room.board.notes.find((n) => n.id === noteId);
+      if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+      if (note.authorId !== playerId && room.hostId !== playerId) {
+        return NextResponse.json({ error: "You can only move your own notes" }, { status: 403 });
+      }
+      const w = room.board.wallWidth || 2800;
+      const h = room.board.wallHeight || 2000;
+      note.x = Math.max(0, Math.min(w - 160, body.noteX));
+      note.y = Math.max(0, Math.min(h - 160, body.noteY));
+      room = saveRoom(room);
+      return NextResponse.json(snapshot(room));
+    }
+
+    if (action === "add-strokes") {
+      const incoming = body.strokes || [];
+      if (!incoming.length) return NextResponse.json(snapshot(room));
+      for (const s of incoming.slice(0, 8)) {
+        if (!s.points?.length) continue;
+        room.board.strokes.push({
+          id: s.id || randomUUID(),
+          authorId: playerId,
+          tool: (s.tool as BoardStroke["tool"]) || "pen",
+          color: s.color || "#FFFFFF",
+          width: s.width || 2,
+          points: s.points.slice(0, 400),
+          createdAt: Date.now(),
+        });
+      }
+      if (room.board.strokes.length > 800) {
+        room.board.strokes = room.board.strokes.slice(-800);
+      }
+      room = saveRoom(room);
+      return NextResponse.json(snapshot(room));
+    }
+
+    if (action === "clear-board" && room.hostId === playerId) {
       room.board.notes = [];
+      room.board.strokes = [];
+      room = saveRoom(room);
+      return NextResponse.json(snapshot(room));
+    }
+
+    if (action === "clear-drawings" && room.hostId === playerId) {
+      room.board.strokes = [];
       room = saveRoom(room);
       return NextResponse.json(snapshot(room));
     }
