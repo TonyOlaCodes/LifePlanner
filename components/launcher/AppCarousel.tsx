@@ -8,6 +8,8 @@ export type AppTile = {
   href: string;
   name: string;
   blurb: string;
+  vibe: string;
+  badge?: string;
   Icon: LucideIcon;
   gradient: string;
   glow: string;
