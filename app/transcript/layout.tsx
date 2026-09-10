@@ -14,9 +14,9 @@ export default function TranscriptLayout({ children }: { children: React.ReactNo
       }
     >
       <header className="transcript-shell__header">
-        <Link href="/" className="transcript-shell__back tap-scale" aria-label="Back to apps">
+        <Link href="/" className="transcript-shell__back tap-scale" aria-label="Back to Nexus">
           <ArrowLeft size={18} />
-          <span>Apps</span>
+          <span>Nexus</span>
         </Link>
         <span className="transcript-shell__brand">Transcript</span>
       </header>

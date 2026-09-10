@@ -1,13 +1,13 @@
 {
-  "name": "Studio",
-  "short_name": "Studio",
-  "description": "Your apps — Life Planner, Transcript, and more",
+  "name": "NEXUS",
+  "short_name": "NEXUS",
+  "description": "Six dimensions — your cosmic app hub",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#020208",
+  "theme_color": "#020208",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
@@ -30,7 +30,7 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["productivity", "lifestyle", "health"],
+  "categories": ["productivity", "lifestyle", "entertainment"],
   "shortcuts": [
     {
       "name": "Life Planner",
@@ -39,15 +39,15 @@
       "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
     },
     {
-      "name": "Transcript",
-      "short_name": "Transcript",
-      "url": "/transcript?source=shortcut",
+      "name": "Aura",
+      "short_name": "Aura",
+      "url": "/aura?source=shortcut",
       "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
     },
     {
-      "name": "Focus",
-      "short_name": "Focus",
-      "url": "/life/focus?source=shortcut",
+      "name": "Orbit Board",
+      "short_name": "Board",
+      "url": "/board?source=shortcut",
       "icons": [{ "src": "/icons/192", "sizes": "192x192" }]
     }
   ]

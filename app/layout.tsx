@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Studio",
-  description: "Your apps — Life Planner, Transcript, and more",
-  applicationName: "Studio",
+  title: "NEXUS",
+  description: "Six dimensions — Life Planner, Aura, Transcript, Wave Lock, Live Poll, Orbit Board",
+  applicationName: "NEXUS",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Studio",
+    title: "NEXUS",
   },
   formatDetection: {
     telephone: false,
@@ -37,8 +37,8 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#000000" },
-    { media: "(prefers-color-scheme: light)", color: "#000000" },
+    { media: "(prefers-color-scheme: dark)", color: "#020208" },
+    { media: "(prefers-color-scheme: light)", color: "#020208" },
   ],
 };
 

@@ -1,19 +1,23 @@
 "use client";
 
-import { AppCarousel } from "@/components/launcher/AppCarousel";
+import { CosmicCarousel } from "@/components/launcher/CosmicCarousel";
+import { NexusHero } from "@/components/launcher/NexusHero";
+import { Starfield } from "@/components/launcher/Starfield";
 import { STUDIO_APPS } from "@/lib/apps/catalog";
 
 export default function StartPage() {
   return (
-    <main className="start-page">
-      <div className="start-page__atmosphere" aria-hidden />
-      <header className="start-page__header">
-        <p className="start-page__brand">Studio</p>
-        <h1 className="start-page__title">Your apps</h1>
-        <p className="start-page__sub">Pick one to open. Swipe forever — it loops.</p>
-      </header>
-
-      <AppCarousel apps={STUDIO_APPS} />
+    <main className="nexus-page">
+      <Starfield />
+      <div className="nexus-aurora" aria-hidden />
+      <div className="nexus-scanlines" aria-hidden />
+      <NexusHero />
+      <CosmicCarousel apps={STUDIO_APPS} />
+      <footer className="nexus-footer">
+        <span>NEXUS</span>
+        <span className="nexus-footer__pulse" />
+        <span>Always on</span>
+      </footer>
     </main>
   );
 }
