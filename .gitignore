@@ -46,3 +46,4 @@ public/workbox-*.js
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+bin/

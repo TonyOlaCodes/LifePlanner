@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Studio",
-  description: "Your apps — Life Planner, Transcript, and more",
+  description: "Your apps — Life Planner, Dub, Transcript, and more",
   applicationName: "Studio",
   manifest: "/manifest.json",
   appleWebApp: {

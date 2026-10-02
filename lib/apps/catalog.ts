@@ -1,4 +1,4 @@
-import { CalendarDays, Mic2, Radio, Vote, StickyNote, Zap } from "lucide-react";
+import { CalendarDays, Mic2, Radio, Vote, StickyNote, Zap, AudioLines } from "lucide-react";
 import type { AppTile } from "@/components/launcher/AppCarousel";
 
 export const STUDIO_APPS: AppTile[] = [
@@ -12,6 +12,17 @@ export const STUDIO_APPS: AppTile[] = [
     accent: "#6EE7B7",
     border: "rgba(110, 231, 183, 0.28)",
     iconBg: "rgba(110, 231, 183, 0.14)",
+  },
+  {
+    href: "/dub",
+    name: "Dub",
+    blurb: "YouTube to MP3, then record voice over it.",
+    Icon: AudioLines,
+    gradient: "linear-gradient(145deg, #7c2d12 0%, #431407 55%, #1c0a04 100%)",
+    glow: "rgba(251, 146, 60, 0.4)",
+    accent: "#FB923C",
+    border: "rgba(251, 146, 60, 0.34)",
+    iconBg: "rgba(251, 146, 60, 0.16)",
   },
   {
     href: "/transcript",
